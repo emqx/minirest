@@ -1,0 +1,42 @@
+%%--------------------------------------------------------------------
+%% Copyright (c) 2015-2017 EMQ Enterprise, Inc. (http://emqtt.io).
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%--------------------------------------------------------------------
+
+-module(rest_api_books).
+
+-author("Feng Lee <feng@emqtt.io>").
+
+-rest_api(#{name   => list_books,
+            method => 'GET',
+            path   => "/books/",
+            func   => list,
+            descr  => "List books"}).
+
+-rest_api(#{name   => get_book,
+            method => 'GET',
+            path   => "/books/:int:id",
+            func   => get,
+            descr  => "Get book by Id"}).
+
+-export([list/2, get/2]).
+
+list(_Bindings, _Params) ->
+    Books = [#{id => I, name => list_to_binary("book" ++ integer_to_list(I))}
+             || I <- lists:seq(1, 100)],
+    {ok, Books}.
+
+get(#{id := Id}, _Params) ->
+    {200, #{id => Id, name => list_to_binary("book" ++ integer_to_list(Id))}}.
+

@@ -4,7 +4,12 @@ deps
 *.beam
 *.plt
 erl_crash.dump
-ebin/*.beam
+ebin/
 rel/example_project
 .concrete/DEV_MODE
 .rebar
+cover/
+ct.coverdata
+eunit.coverdata
+logs/
+minirest.d
