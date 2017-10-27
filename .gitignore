@@ -13,3 +13,4 @@ ct.coverdata
 eunit.coverdata
 logs/
 minirest.d
+.erlang.mk/
