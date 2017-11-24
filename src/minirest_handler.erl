@@ -63,8 +63,12 @@ dispatch(Path, Req, Routes) ->
         false -> Req:not_found()
     end.
 
-format_route(#{name := Name, method := Method,path := Path, descr := Descr}) ->
-    [{name, Name}, {method, Method}, {path, bin(Path)}, {descr, bin(Descr)}].
+format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
+    [{name, Name}, {method, Method}, {path, format_path(Path)}, {descr, bin(Descr)}].
+
+%% Remove the :type field.
+format_path(Path) ->
+    re:replace(Path, <<":[^:]+(:[^/]+)">>, <<"\\1">>, [global, {return, binary}]).
 
 match_route(_Method, _Path, []) ->
     false;
