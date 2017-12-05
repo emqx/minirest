@@ -28,8 +28,8 @@
 init(Config) ->
     Routes = lists:usort(
                [API#{module => Module, pattern => string:tokens(Path, "/")}
-                || Module <- modules(Config), {rest_api, [API = #{path := Path}]}
-                   <- Module:module_info(attributes)]),
+                || Module <- modules(Config), {rest_api, [API = #{path := Path, name := Name}]}
+                   <- Module:module_info(attributes), not lists:member(Name, maps:get(except, Config, [])) ]),
     {?MODULE, dispatch, [Routes]}.
 
 modules(Config) ->
