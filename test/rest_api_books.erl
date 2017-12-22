@@ -30,7 +30,19 @@
             func   => get,
             descr  => "Get book by Id"}).
 
--export([list/2, get/2]).
+-rest_api(#{name   => put_book,
+            method => 'PUT',
+            path   => "/books/:int:id",
+            func   => put,
+            descr  => "Put book name by Id"}).
+
+-rest_api(#{name   => error_api,
+            method => 'DELETE',
+            path   => "/books/:int:id",
+            func   => delete,
+            descr  => "delete book name by Id"}).
+
+-export([list/2, get/2, put/2]).
 
 list(_Bindings, _Params) ->
     Books = [#{id => I, name => list_to_binary("book" ++ integer_to_list(I))}
@@ -40,3 +52,14 @@ list(_Bindings, _Params) ->
 get(#{id := Id}, _Params) ->
     {200, #{id => Id, name => list_to_binary("book" ++ integer_to_list(Id))}}.
 
+put(#{id := Id}, Params) ->
+    Name = proplists:get_value(<<"name">>, Params),
+    case Name of
+        <<"ok">> ->
+            ok;
+        <<"error">> ->
+            {error, Id}
+    end.
+
+delete(#{id := Id}, _Params) ->
+    {error, "error_api"}.
