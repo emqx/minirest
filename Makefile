@@ -1,11 +1,11 @@
 PROJECT = minirest
 PROJECT_DESCRIPTION = A Mini RESTful API Framework
-PROJECT_VERSION = 0.1
+PROJECT_VERSION = 0.1.1
 
 DEPS = jsx mochiweb
 
 dep_jsx      = git https://github.com/talentdeficit/jsx
-dep_mochiweb = git https://github.com/emqtt/mochiweb master
+dep_mochiweb = git https://github.com/emqtt/mochiweb v4.2.1
 
 ERLC_OPTS += +debug_info
 
