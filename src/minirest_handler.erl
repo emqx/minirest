@@ -80,7 +80,7 @@ match_route(Method, Path, [Route|Routes]) ->
             match_route(Method, Path, Routes)
     end;
 match_route(Method, Path, #{method := Method, pattern := Pattern}) ->
-    match_path(lists:map(fun unquote/1, string:tokens(Path, "/")), Pattern, #{});
+    match_path(lists:map(fun mochiweb_util:unquote/1, string:tokens(Path, "/")), Pattern, #{});
 match_route(_Method, _Path, _Route) ->
     false.
 
@@ -134,5 +134,4 @@ jsonify(Req, Code, Headers, Response) ->
 
 bin(S) -> iolist_to_binary(S).
 
-unquote(P) -> mochiweb_util:unquote(P).
 
