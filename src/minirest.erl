@@ -48,7 +48,8 @@ stop_http(ServerName, ListenOn) ->
 
 %% Callback
 handle_request(Req, Handlers) ->
-    case match_handler(Req:get(path), Handlers) of
+    {Path0, _, _} = mochiweb_util:urlsplit_path(Req:get(raw_path)),
+    case match_handler(Path0, Handlers) of
         {ok, Path, Handler} ->
             try apply_handler(Req, Path, Handler)
             catch _:Error -> internal_error(Req, Error)
