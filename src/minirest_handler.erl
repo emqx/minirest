@@ -110,7 +110,12 @@ parse_params('HEAD', Req) ->
 parse_params('GET', Req) ->
     Req:parse_qs();
 parse_params(_Method, Req) ->
-    Req:parse_post().
+    case Req:recv_body() of
+        <<>> -> [];
+        undefined -> [];
+        Body ->
+            jsx:decode(Body)
+    end.
 
 parse_var("atom", S) -> list_to_existing_atom(S);
 parse_var("int", S)  -> list_to_integer(S);
