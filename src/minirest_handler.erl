@@ -40,27 +40,28 @@ modules(Config) ->
 
 %% Get API List
 dispatch("/", Req, Routes) ->
-    case Req:get(method) of
+    case binary_to_atom(cowboy_req:method(Req), utf8) of
         'GET' ->
             jsonify(Req, 200, [format_route(Route) || Route <- Routes]);
         _ ->
-            Req:respond(400, [{"Content-Type", "text/plain"}], <<"Bad Request">>)
+            bad_req(Req, <<"Bad Reques">>)
     end;
 
 %% Dispatch request to REST APIs
 dispatch(Path, Req, Routes) ->
-    case catch match_route(Req:get(method), Path, Routes) of
+    case catch match_route(binary_to_atom(cowboy_req:method(Req), utf8), Path, Routes) of
         {ok, #{module := Mod, func := Fun, bindings := Bindings}} ->
             case catch parse_params(Req) of
                 {'EXIT', Reason} ->
                     error_logger:error_msg("Params error: ~p", [Reason]),
-                    Req:respond(400, [{"Content-Type", "text/plain"}], <<"Bad Request">>);
+                    bad_req(Req, <<"Bad Reques">>);
                 Params ->
                     jsonify(Req, erlang:apply(Mod, Fun, [Bindings, Params]))
             end;
         {'EXIT', {badarg, _}} ->
-            Req:not_found();
-        false -> Req:not_found()
+            bad_req(Req, <<"Not found.">>);
+        false ->
+            bad_req(Req, <<"Not found.">>)
     end.
 
 format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
@@ -103,19 +104,15 @@ match_path(_Path, _Pattern, _Bindings) ->
     false.
 
 parse_params(Req) ->
-    parse_params(Req:get(method), Req).
+    parse_params(cowboy_req:method(Req), Req).
 
-parse_params('HEAD', Req) ->
-    Req:parse_qs();
-parse_params('GET', Req) ->
-    Req:parse_qs();
+parse_params(<<"HEAD">>, Req) ->
+    cowboy_req:qs(Req);
+parse_params(<<"GET">>, Req) ->
+    cowboy_req:parse_qs(Req);
 parse_params(_Method, Req) ->
-    case Req:recv_body() of
-        <<>> -> [];
-        undefined -> [];
-        Body ->
-            jsx:decode(Body)
-    end.
+    {ok, [{PostVals, _}], _} = cowboy_req:read_urlencoded_body(Req),
+    jsx:decode(PostVals).
 
 parse_var("atom", S) -> list_to_existing_atom(S);
 parse_var("int", S)  -> list_to_integer(S);
@@ -135,8 +132,9 @@ jsonify(Req, {Code, Headers, Response}) when is_integer(Code) ->
 jsonify(Req, Code, Response) ->
     jsonify(Req, Code, [], Response).
 jsonify(Req, Code, Headers, Response) ->
-    Req:respond({Code, [{"Content-type", "application/json"}|Headers], jsx:encode(Response)}).
+    cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, jsx:encode(Response), Req).
 
 bin(S) -> iolist_to_binary(S).
 
-
+bad_req(Req, Text) ->
+    cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, Text, Req).

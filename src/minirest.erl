@@ -18,10 +18,10 @@
 
 -author("Feng Lee <feng@emqtt.io>").
 
--export([start_http/4, handler/1, stop_http/2]).
+-export([start_http/4, handler/1, stop_http/1, map/1]).
 
-%% MFArgs Callback
--export([handle_request/2]).
+%% Cowboy Callback
+-export([init/2]).
 
 -type(option() :: {authorization, fun()}).
 
@@ -30,9 +30,14 @@
 -export_type([option/0, handler/0]).
 
 -spec(start_http(atom(), esockd:listen_on(), list(esockd:option()), list(handler())) -> {ok, pid()}).
-start_http(ServerName, ListenOn, Options, Handlers) ->
-    MFArgs = {?MODULE, handle_request, [[map(Handler) || Handler <- Handlers]]},
-    mochiweb:start_http(ServerName, ListenOn, Options, MFArgs).
+start_http(ServerName, ListenOn, _Options, Handlers) ->
+    Dispatch = cowboy_router:compile([{'_', [] ++ Handlers}]),
+    {ok, _} = cowboy:start_clear(ServerName, [{port, ListenOn}],
+                                 #{env => #{dispatch => Dispatch}}).
+
+init(Req, Opts) ->
+    Req1 = handle_request(Req, Opts),
+    {ok, Req1, Opts}.
 
 map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
@@ -42,20 +47,20 @@ map({Prefix, MFArgs, Options}) ->
 -spec(handler(minirest_handler:config()) -> handler()).
 handler(Config) -> minirest_handler:init(Config).
 
--spec(stop_http(atom(), esockd:listen_on()) -> ok).
-stop_http(ServerName, ListenOn) ->
-    mochiweb:stop_http(ServerName, ListenOn).
+-spec(stop_http(atom()) -> ok).
+stop_http(ServerName) ->
+    cowboy:stop_listener(ServerName).
 
 %% Callback
 handle_request(Req, Handlers) ->
-    {Path0, _, _} = mochiweb_util:urlsplit_path(Req:get(raw_path)),
+    Path0 = binary_to_list(cowboy_req:path(Req)),
     case match_handler(Path0, Handlers) of
         {ok, Path, Handler} ->
             try apply_handler(Req, Path, Handler)
             catch _:Error -> internal_error(Req, Error)
             end;
         not_found ->
-            Req:not_found()
+            cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
     end.
 
 match_handler(_Path, []) ->
@@ -72,8 +77,9 @@ add_slash(Path) -> "/" ++ Path.
 apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
     case AuthFun(Req) of
         true  -> apply_handler(Req, Path, MFArgs);
-        false -> Headers = [{"WWW-Authenticate", "Basic Realm=\"minirest-server\""}],
-                 Req:respond({401, Headers, <<"UNAUTHORIZED">>})
+        false ->
+            cowboy_req:reply(400, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+                             <<"UNAUTHORIZED">>, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs}) ->
@@ -83,7 +89,7 @@ apply_handler(Req, Path, {M, F, Args}) ->
     erlang:apply(M, F, [Path, Req | Args]).
 
 internal_error(Req, Error) ->
-    error_logger:error_msg("~s ~s error: ~p", [Req:get(method), Req:get(path), Error]),
+    error_logger:error_msg("~s ~s error: ~p", [cowboy_req:method(Req), cowboy_req:path(Req), Error]),
     error_logger:error_msg("~p", [erlang:get_stacktrace()]),
-    Req:respond({500, [{"Content-Type", "text/plain"}], <<"Internal Error">>}).
+    cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
 
