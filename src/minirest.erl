@@ -29,7 +29,7 @@
 
 -export_type([option/0, handler/0]).
 
--spec(start_http(atom(), esockd:listen_on(), list(esockd:option()), list(handler())) -> {ok, pid()}).
+-spec(start_http(atom(), esockd:listen_on(), list(esockd:option()), list()) -> {ok, pid()}).
 start_http(ServerName, ListenOn, _Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', [] ++ Handlers}]),
     {ok, _} = cowboy:start_clear(ServerName, [{port, ListenOn}],
