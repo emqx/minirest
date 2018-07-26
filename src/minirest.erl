@@ -18,7 +18,7 @@
 
 -author("Feng Lee <feng@emqtt.io>").
 
--export([start_http/4, handler/1, stop_http/1, map/1]).
+-export([start_http/3, start_https/3, handler/1, stop_http/1, map/1]).
 
 %% Cowboy Callback
 -export([init/2]).
@@ -29,11 +29,15 @@
 
 -export_type([option/0, handler/0]).
 
--spec(start_http(atom(), esockd:listen_on(), list(esockd:option()), list()) -> {ok, pid()}).
-start_http(ServerName, ListenOn, _Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', [] ++ Handlers}]),
-    {ok, _} = cowboy:start_clear(ServerName, [{port, ListenOn}],
-                                 #{env => #{dispatch => Dispatch}}).
+-spec(start_http(atom(), list(), list()) -> {ok, pid()}).
+start_http(ServerName, Options, Handlers) ->
+    Dispatch = cowboy_router:compile([{'_', Handlers}]),
+    {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}).
+
+-spec(start_https(atom(), list(), list()) -> {ok, pid()}).
+start_https(ServerName, Options, Handlers) ->
+    Dispatch = cowboy_router:compile([{'_', Handlers}]),
+    {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}).
 
 init(Req, Opts) ->
     Req1 = handle_request(Req, Opts),
