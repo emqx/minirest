@@ -107,12 +107,17 @@ parse_params(Req) ->
     parse_params(cowboy_req:method(Req), Req).
 
 parse_params(<<"HEAD">>, Req) ->
-    cowboy_req:qs(Req);
+    cowboy_req:parse_qs(Req);
 parse_params(<<"GET">>, Req) ->
     cowboy_req:parse_qs(Req);
 parse_params(_Method, Req) ->
-    {ok, [{PostVals, _}], _} = cowboy_req:read_urlencoded_body(Req),
-    jsx:decode(PostVals).
+    case cowboy_req:has_body(Req) of
+        true ->
+            {ok, [{PostVals, _}], _} = cowboy_req:read_urlencoded_body(Req),
+            jsx:decode(PostVals);
+        false ->
+            []
+    end.
 
 parse_var("atom", S) -> list_to_existing_atom(S);
 parse_var("int", S)  -> list_to_integer(S);
