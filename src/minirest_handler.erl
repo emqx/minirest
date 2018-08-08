@@ -113,8 +113,8 @@ parse_params(<<"GET">>, Req) ->
 parse_params(_Method, Req) ->
     case cowboy_req:has_body(Req) of
         true ->
-            {ok, [{PostVals, _}], _} = cowboy_req:read_urlencoded_body(Req),
-            jsx:decode(PostVals);
+            {_, Body, _} = cowboy_req:read_body(Req),
+            jsx:decode(Body);
         false ->
             []
     end.
