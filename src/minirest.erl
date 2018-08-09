@@ -16,7 +16,6 @@
 
 -export([start_http/3, start_https/3, stop_http/1]).
 -export([handler/1]).
--export([map/1]).
 
 %% Cowboy callback
 -export([init/2]).
@@ -26,7 +25,8 @@
 -export_type([option/0, handler/0]).
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
-start_http(ServerName, Options, Handlers) ->
+start_http(ServerName, Options, Handlers0) ->
+    Handlers = handlers(Handlers0),
     Dispatch = cowboy_router:compile([{'_', Handlers}]),
     {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}).
 
@@ -39,6 +39,14 @@ map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
 map({Prefix, MFArgs, Options}) ->
     #{prefix => Prefix, mfargs => MFArgs, options => maps:from_list(Options)}.
+
+handlers(Handlers) ->
+    lists:map(
+        fun({Prefix, minirest, HHs}) ->
+            {Prefix, minirest, [map(HH) || HH <- HHs]};
+        ({Prefix, Module, Info}) ->
+            {Prefix, Module, Info}
+    end, Handlers).
 
 init(Req, Opts) ->
     Req1 = handle_request(Req, Opts),
