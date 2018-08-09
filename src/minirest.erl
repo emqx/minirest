@@ -1,5 +1,4 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,21 +11,17 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%--------------------------------------------------------------------
 
 -module(minirest).
 
--author("Feng Lee <feng@emqtt.io>").
+-export([start_http/3, start_https/3, stop_http/1]).
+-export([handler/1]).
 
--export([start_http/3, start_https/3, handler/1, stop_http/1, map/1]).
-
-%% Cowboy Callback
+%% Cowboy callback
 -export([init/2]).
 
 -type(option() :: {authorization, fun()}).
-
 -type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
-
 -export_type([option/0, handler/0]).
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
@@ -43,11 +38,6 @@ init(Req, Opts) ->
     Req1 = handle_request(Req, Opts),
     {ok, Req1, Opts}.
 
-map({Prefix, MFArgs}) ->
-    map({Prefix, MFArgs, []});
-map({Prefix, MFArgs, Options}) ->
-    #{prefix => Prefix, mfargs => MFArgs, options => maps:from_list(Options)}.
-
 -spec(handler(minirest_handler:config()) -> handler()).
 handler(Config) -> minirest_handler:init(Config).
 
@@ -57,11 +47,12 @@ stop_http(ServerName) ->
 
 %% Callback
 handle_request(Req, Handlers) ->
-    Path0 = binary_to_list(cowboy_req:path(Req)),
-    case match_handler(Path0, Handlers) of
+    case match_handler(binary_to_list(cowboy_req:path(Req)), Handlers) of
         {ok, Path, Handler} ->
-            try apply_handler(Req, Path, Handler)
-            catch _:Error -> internal_error(Req, Error)
+            try
+                apply_handler(Req, Path, Handler)
+            catch _:Error:Stacktrace ->
+                internal_error(Req, Error, Stacktrace)
             end;
         not_found ->
             cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
@@ -92,8 +83,8 @@ apply_handler(Req, Path, #{mfargs := MFArgs}) ->
 apply_handler(Req, Path, {M, F, Args}) ->
     erlang:apply(M, F, [Path, Req | Args]).
 
-internal_error(Req, Error) ->
-    error_logger:error_msg("~s ~s error: ~p", [cowboy_req:method(Req), cowboy_req:path(Req), Error]),
-    error_logger:error_msg("~p", [erlang:get_stacktrace()]),
+internal_error(Req, Error, Stacktrace) ->
+    error_logger:error_msg("~s ~s error: ~p, stacktrace:~n~p",
+                           [cowboy_req:method(Req), cowboy_req:path(Req), Error, Stacktrace]),
     cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
 

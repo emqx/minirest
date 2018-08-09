@@ -1,5 +1,4 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2015-2017 EMQ Enterprise, Inc. (http://emqtt.io).
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,7 +11,6 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%--------------------------------------------------------------------
 
 -module(minirest_SUITE).
 
@@ -20,7 +18,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-all() -> [{group, handler}, {group, rest}, {group, rest_app}].
+all() ->
+    [{group, handler}, {group, rest}, {group, rest_app}].
 
 groups() ->
     [{handler,  [sequence], [t_init]},
@@ -28,29 +27,31 @@ groups() ->
      {rest_app, [sequence], [t_put, t_delete, t_auth]}].
 
 init_per_suite(_Config) ->
-    [application:ensure_all_started(App) || App <- [esockd, mochiweb, minirest]].
+    [application:ensure_all_started(App) || App <- [cowboy, minirest]].
 
 end_per_suite(_Config) ->
     ok.
 
 init_per_group(rest, _Config) ->
     Handlers = [{"/api/v2/", minirest:handler(#{modules => [rest_api_books]})}],
-    minirest:start_http(rest_server, 8080, [], Handlers);
+    minirest:start_http(rest_server, [{port, 8080}], Handlers);
 
 init_per_group(rest_app, _Config) ->
     ok = application:start(minirest_example),
-    Handlers = [{"/api/v2/", minirest:handler(#{apps => [minirest_example], modules => [rest_api_books]}), [{authorization, fun authorize_appid/1}]}],
-    minirest:start_http(rest_server, 8080, [], Handlers);
+    Handlers = [{"/api/v2/", minirest:handler(#{apps    => [minirest_example],
+                                                modules => [rest_api_books]}),
+                 [{authorization, fun authorize_appid/1}]}],
+    minirest:start_http(rest_server, [{port, 8080}], Handlers);
 
 init_per_group(_Group, _Config) ->
     ok.
 
 end_per_group(rest, _Config) ->
-    minirest:stop_http(rest_server, 8080);
+    minirest:stop_http(rest_server);
 
 end_per_group(rest_app, _Config) ->
     ok = application:stop(minirest_example),
-    minirest:stop_http(rest_server, 8080);
+    minirest:stop_http(rest_server);
 
 end_per_group(_Group, _Config) ->
     ok.
@@ -77,15 +78,19 @@ t_put(_Config) ->
 	SuccessJson = [{<<"name">>, <<"ok">>}, {<<"username">>, <<"admin">>}, {<<"password">>, <<"public">>}],
 	ErrorJson = [{<<"name">>, <<"error">>}, {<<"username">>, <<"admin">>}, {<<"password">>, <<"public">>}],
     {ok, {{_, 200, "OK"}, _Headers, Body}} = json_request(put, "http://127.0.0.1:8080/api/v2/books/1", SuccessJson),
-    ?assertEqual(<<"ok">>, mochijson2:decode(Body)),
+    ?assertEqual(<<"ok">>, jsx:decode(Body)),
     {ok, {{_, ErrorCode, _}, _Headers1, _Body}} = json_request(put, "http://127.0.0.1:8080/api/v2/books/1", ErrorJson),
     ?assertEqual(500, ErrorCode).
 
 t_delete(_Config) ->
-    {ok, {{_, 500, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1", [{<<"username">>, <<"admin">>}, {<<"password">>, <<"public">>}]).
+    {ok, {{_, 500, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1",
+                                                        [{<<"username">>, <<"admin">>},
+                                                         {<<"password">>, <<"public">>}]).
 
 t_auth(_Config) ->
-    {ok, {{_, 401, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1", [{<<"username">>, <<"admin1">>}, {<<"password">>, <<"public">>}]).
+    {ok, {{_, 401, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1",
+                                                        [{<<"username">>, <<"admin1">>},
+                                                         {<<"password">>, <<"public">>}]).
 
 httpc_get(Url) ->
     httpc:request(get, {Url, []}, [], [{body_format, binary}]).
@@ -93,7 +98,7 @@ httpc_get(Url) ->
 json_request(Request, Url, Json) ->
 	Headers = [],
 	ContentType = "application/json",
-	Body = iolist_to_binary(mochijson2:encode(Json)),
+	Body = iolist_to_binary(jsx:encode(Json)),
     httpc:request(Request, {Url, Headers, ContentType, Body}, [], []).
 
 authorize_appid(Req) ->
@@ -111,5 +116,4 @@ parse_params('GET', Req) ->
     Req:parse_qs();
 parse_params(_Method, Req) ->
     Req:parse_post().
-
 
