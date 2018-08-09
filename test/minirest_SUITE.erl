@@ -27,7 +27,7 @@ groups() ->
      {rest_app, [sequence], [t_put, t_delete, t_auth]}].
 
 init_per_suite(_Config) ->
-    [application:ensure_all_started(App) || App <- [cowboy, minirest]].
+    [application:ensure_all_started(App) || App <- [inets, cowboy, minirest]].
 
 end_per_suite(_Config) ->
     ok.
@@ -42,7 +42,8 @@ init_per_group(rest_app, _Config) ->
     Handlers = [{"/api/v2/", minirest:handler(#{apps    => [minirest_example],
                                                 modules => [rest_api_books]}),
                  [{authorization, fun authorize_appid/1}]}],
-    minirest:start_http(rest_server, [{port, 8080}], Handlers);
+    Dispatch = [{"/api/v2/[...]", minirest, Handlers}],
+    minirest:start_http(rest_server, [{port, 8080}], Dispatch);
 
 init_per_group(_Group, _Config) ->
     ok.
@@ -103,18 +104,23 @@ json_request(Request, Url, Json) ->
     httpc:request(Request, {Url, Headers, ContentType, Body}, [], []).
 
 authorize_appid(Req) ->
-    Params = parse_params(Req),
-    UserName = proplists:get_value(<<"username">>, Params),
-    Password = proplists:get_value(<<"password">>, Params),
-    (UserName =:= <<"admin">>) and (Password =:= <<"public">>).
+    case cowboy_req:parse_header(<<"authorization">>, Req) of
+        {basic, Username, Password} ->
+            (Username =:= <<"admin">>) and (Password =:= <<"public">>);
+         _  -> false
+    end.
 
 parse_params(Req) ->
-    parse_params(Req:get(method), Req).
+    parse_params(binary_to_atom(cowboy_req:method(Req), utf8), Req).
 
 parse_params('HEAD', Req) ->
-    Req:parse_qs();
+    cowboy_req:parse_qs(Req);
 parse_params('GET', Req) ->
-    Req:parse_qs();
+    cowboy_req:parse_qs(Req);
 parse_params(_Method, Req) ->
-    Req:parse_post().
+    case cowboy_req:has_body(Req) of
+        true  -> {_, Body, _} = cowboy_req:read_body(Req),
+                 jsx:decode(Body);
+        false -> []
+    end.
 
