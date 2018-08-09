@@ -26,13 +26,12 @@
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers0) ->
-    Handlers = handlers(Handlers0),
-    Dispatch = cowboy_router:compile([{'_', Handlers}]),
+    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}).
 
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
-start_https(ServerName, Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', Handlers}]),
+start_https(ServerName, Options, Handlers0) ->
+    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}).
 
 map({Prefix, MFArgs}) ->
