@@ -25,12 +25,12 @@
 -export_type([option/0, handler/0]).
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
-start_http(ServerName, Options, Handlers0) ->
+start_http(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}).
 
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
-start_https(ServerName, Options, Handlers0) ->
+start_https(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}).
 
