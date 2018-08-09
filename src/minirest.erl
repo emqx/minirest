@@ -86,7 +86,7 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthF
     case AuthFun(Req) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
-            cowboy_req:reply(400, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req)
     end;
 

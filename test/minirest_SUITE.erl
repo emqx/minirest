@@ -41,7 +41,7 @@ init_per_group(rest_app, _Config) ->
     ok = application:start(minirest_example),
     Handlers = [{"/api/v2/", minirest:handler(#{apps    => [minirest_example],
                                                 modules => [rest_api_books]}),
-                 [{authorization, fun authorize_appid/1}]}],
+                [{authorization, fun authorize_appid/1}]}],
     Dispatch = [{"/api/v2/[...]", minirest, Handlers}],
     minirest:start_http(rest_server, [{port, 8080}], Dispatch);
 
@@ -77,31 +77,33 @@ t_list(_Config) ->
     ?assertEqual(100, length(jsx:decode(Body, [return_maps]))).
 
 t_put(_Config) ->
-	SuccessJson = [{<<"name">>, <<"ok">>}, {<<"username">>, <<"admin">>}, {<<"password">>, <<"public">>}],
-	ErrorJson = [{<<"name">>, <<"error">>}, {<<"username">>, <<"admin">>}, {<<"password">>, <<"public">>}],
-    {ok, {{_, 200, "OK"}, _Headers, Body}} = json_request(put, "http://127.0.0.1:8080/api/v2/books/1", SuccessJson),
-    ?assertEqual(<<"ok">>, jsx:decode(Body)),
-    {ok, {{_, ErrorCode, _}, _Headers1, _Body}} = json_request(put, "http://127.0.0.1:8080/api/v2/books/1", ErrorJson),
+    SuccessJson = [{<<"name">>, <<"ok">>}],
+    ErrorJson = [{<<"name">>, <<"error">>}],
+    {ok, {{_, 200, "OK"}, _Headers, Body}} = json_request(put, "http://127.0.0.1:8080/api/v2/books/1", SuccessJson, [auth_header_("admin", "public")]),
+    ?assertEqual("\"ok\"", Body),
+    {ok, {{_, ErrorCode, _}, _Headers1, _Body}} = json_request(put, "http://127.0.0.1:8080/api/v2/books/1", ErrorJson, [auth_header_("admin", "public")]),
     ?assertEqual(500, ErrorCode).
 
 t_delete(_Config) ->
-    {ok, {{_, 500, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1",
-                                                        [{<<"username">>, <<"admin">>},
-                                                         {<<"password">>, <<"public">>}]).
+    {ok, {{_, 500, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1", [], [auth_header_("admin", "public")]).
 
 t_auth(_Config) ->
-    {ok, {{_, 401, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1",
-                                                        [{<<"username">>, <<"admin1">>},
-                                                         {<<"password">>, <<"public">>}]).
+    {ok, {{_, 401, _}, _Headers, _Body}} = json_request(delete, "http://127.0.0.1:8080/api/v2/books/1",[], [auth_header_("admin1", "public")]).
 
 httpc_get(Url) ->
     httpc:request(get, {Url, []}, [], [{body_format, binary}]).
 
 json_request(Request, Url, Json) ->
-	Headers = [],
-	ContentType = "application/json",
-	Body = iolist_to_binary(jsx:encode(Json)),
+    json_request(Request, Url, Json, []).
+
+json_request(Request, Url, Json, Headers) ->
+    ContentType = "application/json",
+    Body = iolist_to_binary(jsx:encode(Json)),
     httpc:request(Request, {Url, Headers, ContentType, Body}, [], []).
+
+auth_header_(User, Pass) ->
+    Encoded = base64:encode_to_string(lists:append([User,":",Pass])),
+    {"Authorization","Basic " ++ Encoded}.
 
 authorize_appid(Req) ->
     case cowboy_req:parse_header(<<"authorization">>, Req) of
@@ -110,17 +112,4 @@ authorize_appid(Req) ->
          _  -> false
     end.
 
-parse_params(Req) ->
-    parse_params(binary_to_atom(cowboy_req:method(Req), utf8), Req).
-
-parse_params('HEAD', Req) ->
-    cowboy_req:parse_qs(Req);
-parse_params('GET', Req) ->
-    cowboy_req:parse_qs(Req);
-parse_params(_Method, Req) ->
-    case cowboy_req:has_body(Req) of
-        true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                 jsx:decode(Body);
-        false -> []
-    end.
 

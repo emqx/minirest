@@ -42,7 +42,7 @@
             func   => delete,
             descr  => "delete book name by Id"}).
 
--export([list/2, get/2, put/2]).
+-export([list/2, get/2, put/2, delete/2]).
 
 list(_Bindings, _Params) ->
     Books = [#{id => I, name => list_to_binary("book" ++ integer_to_list(I))}
