@@ -40,11 +40,9 @@ map({Prefix, MFArgs, Options}) ->
     #{prefix => Prefix, mfargs => MFArgs, options => maps:from_list(Options)}.
 
 handlers(Handlers) ->
-    lists:map(
-        fun({Prefix, minirest, HHs}) ->
-            {Prefix, minirest, [map(HH) || HH <- HHs]};
-        ({Prefix, Module, Info}) ->
-            {Prefix, Module, Info}
+    lists:map(fun
+        ({Prefix, minirest, HHs}) -> {Prefix, minirest, [map(HH) || HH <- HHs]};
+        (Handler) -> Handler
     end, Handlers).
 
 init(Req, Opts) ->
