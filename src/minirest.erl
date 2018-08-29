@@ -27,12 +27,14 @@
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}).
+    {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}),
+    io:format("Start ~s listener on ~p successfully.~n", [ServerName, proplists:get_value(port, Options)]).
 
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
 start_https(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}).
+    {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}),
+    io:format("Start ~s listener on ~p successfully.~n", [ServerName, proplists:get_value(port, Options)]).
 
 map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
