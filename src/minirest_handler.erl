@@ -100,18 +100,14 @@ match_path(_Path, _Pattern, _Bindings) ->
     false.
 
 parse_params(Req) ->
-    parse_params(cowboy_req:method(Req), Req).
-
-parse_params(<<"HEAD">>, Req) ->
-    cowboy_req:parse_qs(Req);
-parse_params(<<"GET">>, Req) ->
-    cowboy_req:parse_qs(Req);
-parse_params(_Method, Req) ->
-    case cowboy_req:has_body(Req) of
-        true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                 jsx:decode(Body);
-        false -> []
-    end.
+    QueryParams = cowboy_req:parse_qs(Req),
+    BodyParams =
+        case cowboy_req:has_body(Req) of
+            true  -> {_, Body, _} = cowboy_req:read_body(Req),
+                     jsx:decode(Body);
+            false -> []
+        end,
+    QueryParams ++ BodyParams.
 
 parse_var("atom", S) -> list_to_existing_atom(S);
 parse_var("int", S)  -> list_to_integer(S);
@@ -135,4 +131,3 @@ jsonify(Code, Headers, Response, Req) ->
 
 reply(Code, Text, Req) ->
     cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
-
