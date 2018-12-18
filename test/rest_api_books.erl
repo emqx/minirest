@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2015-2017 EMQ Enterprise, Inc. (http://emqtt.io).
+%% Copyright (c) 2015-2018 EMQ Enterprise, Inc. (http://emqtt.io).
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 -module(rest_api_books).
 
--author("Feng Lee <feng@emqtt.io>").
+-author("Feng Lee <feng@emqx.io>").
 
 -rest_api(#{name   => list_books,
             method => 'GET',
