@@ -38,7 +38,7 @@ modules(Config) ->
 dispatch("/", Req, Routes) ->
     case binary_to_atom(cowboy_req:method(Req), utf8) of
         'GET' ->
-            jsonify(200, [format_route(Route) || Route <- Routes], Req);
+            jsonify(200, [{code, 0}, {data, [format_route(Route) || Route <- Routes]}], Req);
         _ ->
             reply(400, <<"Bad Request">>, Req)
     end;
