@@ -45,7 +45,7 @@ dispatch("/", Req, Routes) ->
 
 %% Dispatch request to REST APIs
 dispatch(Path, Req, Routes) ->
-    case catch match_route(binary_to_atom(cowboy_req:method(Req), utf8), Path, Routes) of
+    try match_route(binary_to_atom(cowboy_req:method(Req), utf8), Path, Routes) of
         {ok, #{module := Mod, func := Fun, bindings := Bindings}} ->
             case catch parse_params(Req) of
                 {'EXIT', Reason} ->
@@ -54,9 +54,10 @@ dispatch(Path, Req, Routes) ->
                 Params ->
                     jsonify(erlang:apply(Mod, Fun, [Bindings, Params]), Req)
             end;
-        {'EXIT', {badarg, _}} ->
-            reply(404, <<"Not found.">>, Req);
         false ->
+            reply(404, <<"Not found.">>, Req)
+    catch
+        _Error:_Reason ->
             reply(404, <<"Not found.">>, Req)
     end.
 
