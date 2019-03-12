@@ -3,7 +3,7 @@
               {vsn,"git"},
               {modules,[]},
               {registered,[]},
-              {applications, [kernel, stdlib, jsx, cowboy]},
+              {applications, [kernel,stdlib,jsx,cowboy]},
               {env,[]},
               {licenses, ["Apache-2.0"]},
               {links, ["Github", "https://github.com/emqx/minirest"]}
