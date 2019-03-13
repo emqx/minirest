@@ -1,4 +1,5 @@
-%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%--------------------------------------------------------------------
+%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -11,8 +12,11 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%--------------------------------------------------------------------
 
 -module(minirest_handler).
+
+-author("Feng Lee <feng@emqtt.io>").
 
 -export([init/1, dispatch/3]).
 
@@ -36,33 +40,31 @@ modules(Config) ->
 
 %% Get API List
 dispatch("/", Req, Routes) ->
-    case binary_to_atom(cowboy_req:method(Req), utf8) of
+    case Req:get(method) of
         'GET' ->
-            jsonify(200, [{code, 0}, {data, [format_route(Route) || Route <- Routes]}], Req);
+            jsonify(Req, 200, [format_route(Route) || Route <- Routes]);
         _ ->
-            reply(400, <<"Bad Request">>, Req)
+            Req:respond(400, [{"Content-Type", "text/plain"}], <<"Bad Request">>)
     end;
 
 %% Dispatch request to REST APIs
 dispatch(Path, Req, Routes) ->
-    try match_route(binary_to_atom(cowboy_req:method(Req), utf8), Path, Routes) of
+    case catch match_route(Req:get(method), Path, Routes) of
         {ok, #{module := Mod, func := Fun, bindings := Bindings}} ->
             case catch parse_params(Req) of
                 {'EXIT', Reason} ->
                     error_logger:error_msg("Params error: ~p", [Reason]),
-                    reply(400, <<"Bad Request">>, Req);
+                    Req:respond(400, [{"Content-Type", "text/plain"}], <<"Bad Request">>);
                 Params ->
-                    jsonify(erlang:apply(Mod, Fun, [Bindings, Params]), Req)
+                    jsonify(Req, erlang:apply(Mod, Fun, [Bindings, Params]))
             end;
-        false ->
-            reply(404, <<"Not found.">>, Req)
-    catch
-        _Error:_Reason ->
-            reply(404, <<"Not found.">>, Req)
+        {'EXIT', {badarg, _}} ->
+            Req:not_found();
+        false -> Req:not_found()
     end.
 
 format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
-    [{name, Name}, {method, Method}, {path, format_path(Path)}, {descr, iolist_to_binary(Descr)}].
+    [{name, Name}, {method, Method}, {path, format_path(Path)}, {descr, bin(Descr)}].
 
 %% Remove the :type field.
 format_path(Path) ->
@@ -78,7 +80,7 @@ match_route(Method, Path, [Route|Routes]) ->
             match_route(Method, Path, Routes)
     end;
 match_route(Method, Path, #{method := Method, pattern := Pattern}) ->
-    match_path(string:tokens(Path, "/"), Pattern, #{});
+    match_path(lists:map(fun mochiweb_util:unquote/1, string:tokens(Path, "/")), Pattern, #{});
 match_route(_Method, _Path, _Route) ->
     false.
 
@@ -101,34 +103,40 @@ match_path(_Path, _Pattern, _Bindings) ->
     false.
 
 parse_params(Req) ->
-    QueryParams = cowboy_req:parse_qs(Req),
-    BodyParams =
-        case cowboy_req:has_body(Req) of
-            true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                     jsx:decode(Body);
-            false -> []
-        end,
-    QueryParams ++ BodyParams.
+    parse_params(Req:get(method), Req).
+
+parse_params('HEAD', Req) ->
+    Req:parse_qs();
+parse_params('GET', Req) ->
+    Req:parse_qs();
+parse_params(_Method, Req) ->
+    case Req:recv_body() of
+        <<>> -> [];
+        undefined -> [];
+        Body ->
+            jsx:decode(Body)
+    end.
 
 parse_var("atom", S) -> list_to_existing_atom(S);
 parse_var("int", S)  -> list_to_integer(S);
-parse_var("bin", S)  -> iolist_to_binary(S).
+parse_var("bin", S)  -> list_to_binary(S).
 
-jsonify(ok, Req) ->
-    jsonify(200, <<"ok">>, Req);
-jsonify({ok, Response}, Req) ->
-    jsonify(200, Response, Req);
-jsonify({error, Reason}, Req) ->
-    jsonify(500, Reason, Req);
-jsonify({Code, Response}, Req) when is_integer(Code) ->
-    jsonify(Code, Response, Req);
-jsonify({Code, Headers, Response}, Req) when is_integer(Code) ->
-    jsonify(Code, Headers, Response, Req).
+jsonify(Req, ok) ->
+    jsonify(Req, 200, <<"ok">>);
+jsonify(Req, {ok, Response}) ->
+    jsonify(Req, 200, Response);
+jsonify(Req, {error, Reason}) ->
+    jsonify(Req, 500, Reason);
+jsonify(Req, {Code, Response}) when is_integer(Code) ->
+    jsonify(Req, Code, Response);
+jsonify(Req, {Code, Headers, Response}) when is_integer(Code) ->
+    jsonify(Req, Code, Headers, Response).
 
-jsonify(Code, Response, Req) ->
-    jsonify(Code, #{}, Response, Req).
-jsonify(Code, Headers, Response, Req) ->
-    cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), jsx:encode(Response), Req).
+jsonify(Req, Code, Response) ->
+    jsonify(Req, Code, [], Response).
+jsonify(Req, Code, Headers, Response) ->
+    Req:respond({Code, [{"Content-type", "application/json"}|Headers], jsx:encode(Response)}).
 
-reply(Code, Text, Req) ->
-    cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
+bin(S) -> iolist_to_binary(S).
+
+

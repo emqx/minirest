@@ -1,7 +1,7 @@
 
 # minirest
 
-A mini RESTful API framework built on cowboy and jsx.
+A mini RESTful API framework built on mochiweb and jsx.
 
 ## Write a RESTful API Module
 
@@ -50,5 +50,5 @@ Apache License Version 2.0
 
 ## Author
 
-Feng Lee <feng@emqx.io>
+Feng Lee <feng@emqtt.io>
 
