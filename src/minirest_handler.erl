@@ -14,28 +14,35 @@
 
 -module(minirest_handler).
 
--export([init/1, dispatch/3]).
+-export([init/1, dispatch/4]).
 
 -type(config() :: #{apps => list(atom()), modules => list(module())}).
 
 -export_type([config/0]).
 
--spec(init(config()) -> {?MODULE, dispatch, [map()]}).
+-spec(init(config()) -> {?MODULE, dispatch, list()}).
 init(Config) ->
-    Routes = lists:usort(
-               [API#{module => Module, pattern => string:tokens(Path, "/")}
-                || Module <- modules(Config), {rest_api, [API = #{path := Path, name := Name}]}
-                   <- Module:module_info(attributes), not lists:member(Name, maps:get(except, Config, [])) ]),
-    {?MODULE, dispatch, [Routes]}.
+    Routes = lists:map(fun(App) ->
+        {ok, Modules} = application:get_key(App, modules),
+        routes(App, Config, Modules)
+    end, maps:get(apps, Config, [])),
+    {?MODULE, dispatch, [lists:flatten([Routes, routes(Config)]), maps:get(filter, Config, undefined)]}.
 
-modules(Config) ->
-    lists:foldl(fun(App, Acc) ->
-                    {ok, Mods} = application:get_key(App, modules),
-                    lists:append(Mods, Acc)
-                end, maps:get(modules, Config, []), maps:get(apps, Config, [])).
+routes(Config) ->
+    routes(undefined, Config, maps:get(modules, Config, [])).
+
+routes(App, Config, Modules) ->
+    lists:map(fun(Module) ->
+        [API#{module  => Module,
+              pattern => string:tokens(Path, "/"),
+              app     => App}
+         || {rest_api, [API = #{path := Path,
+                                name := Name}]} <- Module:module_info(attributes),
+                                                   not lists:member(Name, maps:get(except, Config, []))]
+    end, Modules).
 
 %% Get API List
-dispatch("/", Req, Routes) ->
+dispatch("/", Req, Routes, _Filter) ->
     case binary_to_atom(cowboy_req:method(Req), utf8) of
         'GET' ->
             jsonify(200, [{code, 0}, {data, [format_route(Route) || Route <- Routes]}], Req);
@@ -44,21 +51,33 @@ dispatch("/", Req, Routes) ->
     end;
 
 %% Dispatch request to REST APIs
-dispatch(Path, Req, Routes) ->
+dispatch(Path, Req, Routes, Filter) ->
     try match_route(binary_to_atom(cowboy_req:method(Req), utf8), Path, Routes) of
-        {ok, #{module := Mod, func := Fun, bindings := Bindings}} ->
-            case catch parse_params(Req) of
-                {'EXIT', Reason} ->
-                    error_logger:error_msg("Params error: ~p", [Reason]),
-                    reply(400, <<"Bad Request">>, Req);
-                Params ->
-                    jsonify(erlang:apply(Mod, Fun, [Bindings, Params]), Req)
-            end;
+        {ok, Route} ->
+            dispatch(Req, Route, Filter);
         false ->
             reply(404, <<"Not found.">>, Req)
     catch
         _Error:_Reason ->
             reply(404, <<"Not found.">>, Req)
+    end.
+
+dispatch(Req, Route, undefined) ->
+    dispatch(Req, Route);
+
+dispatch(Req, Route, Filter) ->
+    case Filter(Route) of
+        true -> dispatch(Req, Route);
+        false -> reply(404, <<"Not found.">>, Req)
+    end.
+
+dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
+    case catch parse_params(Req) of
+        {'EXIT', Reason} ->
+            error_logger:error_msg("Params error: ~p", [Reason]),
+            reply(400, <<"Bad Request">>, Req);
+        Params ->
+            jsonify(erlang:apply(Mod, Fun, [Bindings, Params]), Req)
     end.
 
 format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
