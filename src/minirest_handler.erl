@@ -14,7 +14,9 @@
 
 -module(minirest_handler).
 
--export([init/1, dispatch/4]).
+-export([ init/1
+        , dispatch/4
+        ]).
 
 -type(config() :: #{apps => list(atom()), modules => list(module())}).
 
