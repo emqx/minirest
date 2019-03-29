@@ -14,7 +14,11 @@
 
 -module(minirest).
 
--export([start_http/3, start_https/3, stop_http/1]).
+-export([ start_http/3
+        , start_https/3
+        , stop_http/1
+        ]).
+
 -export([handler/1]).
 
 %% Cowboy callback
@@ -22,7 +26,10 @@
 
 -type(option() :: {authorization, fun()}).
 -type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
--export_type([option/0, handler/0]).
+
+-export_type([ option/0
+             , handler/0
+             ]).
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
