@@ -15,6 +15,7 @@
 -module(minirest_SUITE).
 
 -compile(export_all).
+-compile(nowarn_export_all).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -59,12 +60,12 @@ end_per_group(_Group, _Config) ->
     ok.
 
 t_init(_Config) ->
-    {minirest_handler, dispatch, [Routes]} = minirest:handler(#{modules => [rest_api_books]}),
+    {minirest_handler, dispatch, [Routes, _Filter = undefined]} = minirest:handler(#{modules => [rest_api_books]}),
     ?assertEqual(4, length(Routes)).
 
 t_index(_Config) ->
     {ok, {{_, 200, "OK"}, _Headers, Body}} = httpc_get("http://127.0.0.1:8080/api/v2/"),
-    APIs = jsx:decode(Body, [return_maps]),
+    #{<<"code">> := 0, <<"data">> := APIs} = jsx:decode(Body, [return_maps]),
     ct:print("REST APIs: ~p", [APIs]),
     ?assertEqual(4, length(APIs)).
 
@@ -111,5 +112,4 @@ authorize_appid(Req) ->
             (Username =:= <<"admin">>) and (Password =:= <<"public">>);
          _  -> false
     end.
-
 
