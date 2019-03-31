@@ -133,6 +133,8 @@ internal_error(Req, Error, Stacktrace) ->
 return() ->
     {ok, [{code, ?SUCCESS}]}.
 
+return(ok) ->
+    {ok, [{code, ?SUCCESS}]};
 return({ok, #{data := Data, meta := Meta}}) ->
     {ok, [{code, ?SUCCESS},
           {data, Data},
