@@ -1,6 +1,6 @@
 PROJECT = minirest
 PROJECT_DESCRIPTION = A Mini RESTful API Framework
-PROJECT_VERSION = 0.2.0
+PROJECT_VERSION = 0.2.2
 
 BUILD_DEPS = jsx cowboy
 

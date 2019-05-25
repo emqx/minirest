@@ -21,8 +21,14 @@
 
 -export([handler/1]).
 
+-export([ return/0
+        , return/1
+        ]).
+
 %% Cowboy callback
 -export([init/2]).
+
+-define(SUCCESS, 0).
 
 -type(option() :: {authorization, fun()}).
 -type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
@@ -30,6 +36,10 @@
 -export_type([ option/0
              , handler/0
              ]).
+
+%%------------------------------------------------------------------------------
+%% Start/Stop Http
+%%------------------------------------------------------------------------------
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
@@ -43,6 +53,10 @@ start_https(ServerName, Options, Handlers) ->
     {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}),
     io:format("Start ~s listener on ~p successfully.~n", [ServerName, proplists:get_value(port, Options)]).
 
+-spec(stop_http(atom()) -> ok).
+stop_http(ServerName) ->
+    cowboy:stop_listener(ServerName).
+
 map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
 map({Prefix, MFArgs, Options}) ->
@@ -54,16 +68,20 @@ handlers(Handlers) ->
         (Handler) -> Handler
     end, Handlers).
 
-init(Req, Opts) ->
-    Req1 = handle_request(Req, Opts),
-    {ok, Req1, Opts}.
+%%------------------------------------------------------------------------------
+%% Handler helper
+%%------------------------------------------------------------------------------
 
 -spec(handler(minirest_handler:config()) -> handler()).
 handler(Config) -> minirest_handler:init(Config).
 
--spec(stop_http(atom()) -> ok).
-stop_http(ServerName) ->
-    cowboy:stop_listener(ServerName).
+%%------------------------------------------------------------------------------
+%% Cowboy callbacks
+%%------------------------------------------------------------------------------
+
+init(Req, Opts) ->
+    Req1 = handle_request(Req, Opts),
+    {ok, Req1, Opts}.
 
 %% Callback
 handle_request(Req, Handlers) ->
@@ -107,4 +125,33 @@ internal_error(Req, Error, Stacktrace) ->
     error_logger:error_msg("~s ~s error: ~p, stacktrace:~n~p",
                            [cowboy_req:method(Req), cowboy_req:path(Req), Error, Stacktrace]),
     cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
+
+%%------------------------------------------------------------------------------
+%% Return
+%%------------------------------------------------------------------------------
+
+return() ->
+    {ok, [{code, ?SUCCESS}]}.
+
+return(ok) ->
+    {ok, [{code, ?SUCCESS}]};
+return({ok, #{data := Data, meta := Meta}}) ->
+    {ok, [{code, ?SUCCESS},
+          {data, Data},
+          {meta, Meta}]};
+return({ok, Data}) ->
+    {ok, [{code, ?SUCCESS},
+          {data, Data}]};
+return({ok, Code, Message}) when is_integer(Code) ->
+    {ok, [{code,    Code},
+          {message, Message}]};
+return({ok, Data, Meta}) ->
+    {ok, [{code, ?SUCCESS},
+          {data, Data},
+          {meta, Meta}]};
+return({error, Message}) ->
+    {ok, [{message, Message}]};
+return({error, Code, Message}) ->
+    {ok, [{code,    Code},
+          {message, Message}]}.
 
