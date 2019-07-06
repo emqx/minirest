@@ -1,5 +1,4 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2015-2017 EMQ Enterprise, Inc. (http://emqtt.io).
+%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,11 +11,10 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%--------------------------------------------------------------------
 
 -module(rest_api_books).
 
--author("Feng Lee <feng@emqtt.io>").
+-author("Feng Lee <feng@emqx.io>").
 
 -rest_api(#{name   => list_books,
             method => 'GET',
@@ -42,7 +40,7 @@
             func   => delete,
             descr  => "delete book name by Id"}).
 
--export([list/2, get/2, put/2]).
+-export([list/2, get/2, put/2, delete/2]).
 
 list(_Bindings, _Params) ->
     Books = [#{id => I, name => list_to_binary("book" ++ integer_to_list(I))}
