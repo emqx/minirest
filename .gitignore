@@ -17,3 +17,4 @@ minirest.d
 _build/
 rebar.lock
 rebar3.crashdump
+.rebar3/

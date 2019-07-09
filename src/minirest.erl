@@ -45,17 +45,20 @@
 start_http(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}),
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, proplists:get_value(port, Options)]).
+    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
 
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
 start_https(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}),
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, proplists:get_value(port, Options)]).
+    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
 
 -spec(stop_http(atom()) -> ok).
 stop_http(ServerName) ->
     cowboy:stop_listener(ServerName).
+
+get_port(#{socket_opts := SocketOpts}) ->
+    proplists:get_value(port, SocketOpts, 18083).
 
 map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
