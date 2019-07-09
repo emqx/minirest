@@ -36,7 +36,7 @@ end_per_suite(_Config) ->
 init_per_group(rest, _Config) ->
     Handlers = [{"/api/v2/", minirest:handler(#{modules => [rest_api_books]})}],
     Dispatch = [{"/api/v2/[...]", minirest, Handlers}],
-    minirest:start_http(rest_server, [{port, 8080}], Dispatch);
+    minirest:start_http(rest_server, #{socket_opts => [{port, 8080}]} , Dispatch);
 
 init_per_group(rest_app, _Config) ->
     ok = application:start(minirest_example),
@@ -44,7 +44,7 @@ init_per_group(rest_app, _Config) ->
                                                 modules => [rest_api_books]}),
                 [{authorization, fun authorize_appid/1}]}],
     Dispatch = [{"/api/v2/[...]", minirest, Handlers}],
-    minirest:start_http(rest_server, [{port, 8080}], Dispatch);
+    minirest:start_http(rest_server, #{socket_opts => [{port, 8080}]} , Dispatch);
 
 init_per_group(_Group, _Config) ->
     ok.
