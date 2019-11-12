@@ -22,6 +22,8 @@
 
 -export_type([config/0]).
 
+-define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
+
 -spec(init(config()) -> {?MODULE, dispatch, list()}).
 init(Config) ->
     Routes = lists:map(fun(App) ->
@@ -149,7 +151,13 @@ jsonify({Code, Headers, Response}, Req) when is_integer(Code) ->
 jsonify(Code, Response, Req) ->
     jsonify(Code, #{}, Response, Req).
 jsonify(Code, Headers, Response, Req) ->
-    cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), jsx:encode(Response), Req).
+    try jsx:encode(Response) of
+        Json ->
+            cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
+    catch
+        error:Reason:_Stacktrace ->
+            ?LOG(error, "Encode ~p failed with ~p", [Response, Reason])
+    end.
 
 reply(Code, Text, Req) ->
     cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
