@@ -147,14 +147,19 @@ return({ok, Data}) ->
           {data, Data}]};
 return({ok, Code, Message}) when is_integer(Code) ->
     {ok, [{code,    Code},
-          {message, Message}]};
+          {message, format_msg(Message)}]};
 return({ok, Data, Meta}) ->
     {ok, [{code, ?SUCCESS},
           {data, Data},
           {meta, Meta}]};
 return({error, Message}) ->
-    {ok, [{message, Message}]};
+    {ok, [{message, format_msg(Message)}]};
 return({error, Code, Message}) ->
     {ok, [{code,    Code},
-          {message, Message}]}.
+          {message, format_msg(Message)}]}.
 
+format_msg(Message) when is_atom(Message) ->
+    Message;
+
+format_msg(Message) when is_tuple(Message) ->
+    iolist_to_binary(io_lib:format("~p", [Message])).
