@@ -49,7 +49,7 @@ routes(App, Config, Modules) ->
 dispatch("/", Req, Routes, _Filter) ->
     case binary_to_atom(cowboy_req:method(Req), utf8) of
         'GET' ->
-            jsonify(200, [{code, 0}, {data, [format_route(Route) || Route <- Routes]}], Req);
+            jsonify(200, #{code => 0, data => [format_route(Route) || Route <- Routes]}, Req);
         _ ->
             reply(400, <<"Bad Request">>, Req)
     end;
@@ -85,7 +85,7 @@ dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
     end.
 
 format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
-    [{name, Name}, {method, Method}, {path, format_path(Path)}, {descr, iolist_to_binary(Descr)}].
+    #{name => Name, method => Method, path => format_path(Path), descr => iolist_to_binary(Descr)}.
 
 %% Remove the :type field.
 format_path(Path) ->
@@ -127,7 +127,11 @@ parse_params(Req) ->
     QueryParams = cowboy_req:parse_qs(Req),
     BodyParams = case cowboy_req:has_body(Req) of
                      true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                              maps:to_list(jiffy:decode(Body, [return_maps]));
+                              case jiffy:decode(Body, [return_maps]) of
+                                  [] -> [];
+                                  <<>> -> [];
+                                  Map when is_map(Map) -> maps:to_list(Map)
+                              end;
                      false -> []
                  end,
     QueryParams ++ BodyParams.
