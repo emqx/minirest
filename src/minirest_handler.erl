@@ -125,12 +125,11 @@ match_path(_Path, _Pattern, _Bindings) ->
 
 parse_params(Req) ->
     QueryParams = cowboy_req:parse_qs(Req),
-    BodyParams =
-        case cowboy_req:has_body(Req) of
-            true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                     jsx:decode(Body);
-            false -> []
-        end,
+    BodyParams = case cowboy_req:has_body(Req) of
+                     true  -> {_, Body, _} = cowboy_req:read_body(Req),
+                              maps:to_list(jiffy:decode(Body, [return_maps]));
+                     false -> []
+                 end,
     QueryParams ++ BodyParams.
 
 parse_var("atom", S) -> list_to_existing_atom(S);
@@ -151,7 +150,7 @@ jsonify({Code, Headers, Response}, Req) when is_integer(Code) ->
 jsonify(Code, Response, Req) ->
     jsonify(Code, #{}, Response, Req).
 jsonify(Code, Headers, Response, Req) ->
-    try jsx:encode(Response) of
+    try jiffy:encode(Response) of
         Json ->
             cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
     catch
