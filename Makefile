@@ -1,40 +1,34 @@
-PROJECT = minirest
-PROJECT_DESCRIPTION = A Mini RESTful API Framework
-PROJECT_VERSION = 0.2.2
+REBAR := rebar3
 
-BUILD_DEPS = jsx cowboy
+.PHONY: all
+all: compile
 
-dep_jsx    = git https://github.com/talentdeficit/jsx 2.9.0
-dep_cowboy = git https://github.com/emqx/cowboy 2.7.1
+compile:
+	$(REBAR) compile
 
-ERLC_OPTS += +debug_info
+.PHONY: clean
+clean: distclean
 
-EUNIT_OPTS = verbose
+.PHONY: distclean
+distclean:
+	@rm -rf _build erl_crash.dump rebar3.crashdump rebar.lock
 
-TEST_ERLC_OPTS += +debug_info
+.PHONY: xref
+xref:
+	$(REBAR) xref
 
-CT_SUITES = minirest
+.PHONY: eunit
+eunit: compile
+	$(REBAR) eunit verbose=truen
 
-COVER = true
+.PHONY: ct
+ct: compile
+	$(REBAR) as test ct -v
 
-$(shell [ -f erlang.mk ] || curl -s -o erlang.mk https://raw.githubusercontent.com/emqx/erlmk/master/erlang.mk)
-include erlang.mk
+cover:
+	$(REBAR) cover
 
-distclean::
-	@rm -rf _build cover deps logs log data
-	@rm -f rebar.lock compile_commands.json
+.PHONY: dialyzer
+dialyzer:
+	$(REBAR) dialyzer
 
-rebar-deps:
-	rebar3 get-deps
-
-rebar-clean:
-	@rebar3 clean
-
-rebar-compile: rebar-deps
-	rebar3 compile
-
-rebar-ct:
-	rebar3 ct
-
-rebar-xref:
-	@rebar3 xref
