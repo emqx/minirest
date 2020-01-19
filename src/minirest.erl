@@ -134,27 +134,33 @@ internal_error(Req, Error, Stacktrace) ->
 %%------------------------------------------------------------------------------
 
 return() ->
-    {ok, [{code, ?SUCCESS}]}.
+    {ok, #{code => ?SUCCESS}}.
 
 return(ok) ->
-    {ok, [{code, ?SUCCESS}]};
+    {ok, #{code => ?SUCCESS}};
 return({ok, #{data := Data, meta := Meta}}) ->
-    {ok, [{code, ?SUCCESS},
-          {data, Data},
-          {meta, Meta}]};
+    {ok, #{code => ?SUCCESS,
+           data => Data,
+           meta => Meta}};
 return({ok, Data}) ->
-    {ok, [{code, ?SUCCESS},
-          {data, Data}]};
+    {ok, #{code => ?SUCCESS,
+           data => Data}};
 return({ok, Code, Message}) when is_integer(Code) ->
-    {ok, [{code,    Code},
-          {message, Message}]};
+    {ok, #{code => Code,
+           message => format_msg(Message)}};
 return({ok, Data, Meta}) ->
-    {ok, [{code, ?SUCCESS},
-          {data, Data},
-          {meta, Meta}]};
+    {ok, #{code => ?SUCCESS,
+           data => Data,
+           meta => Meta}};
 return({error, Message}) ->
-    {ok, [{message, Message}]};
+    {ok, #{message => format_msg(Message)}};
 return({error, Code, Message}) ->
-    {ok, [{code,    Code},
-          {message, Message}]}.
+    {ok, #{code => Code,
+           message => format_msg(Message)}}.
 
+format_msg(Message)
+  when is_atom(Message);
+       is_binary(Message) -> Message;
+
+format_msg(Message) when is_tuple(Message) ->
+    iolist_to_binary(io_lib:format("~p", [Message])).

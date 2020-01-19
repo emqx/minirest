@@ -7,7 +7,9 @@ before_install:
     - git clone https://github.com/erlang/rebar3.git; cd rebar3; ./bootstrap; sudo mv rebar3 /usr/local/bin/; cd ..
 
 script:
-  - make rebar-xref
-  - make rebar-ct
+  - make xref
+  - make eunit
+  - make ct
+  - make cover
 
 sudo: false
