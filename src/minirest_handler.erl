@@ -127,11 +127,7 @@ parse_params(Req) ->
     QueryParams = cowboy_req:parse_qs(Req),
     BodyParams = case cowboy_req:has_body(Req) of
                      true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                              case jiffy:decode(Body, [return_maps]) of
-                                  [] -> [];
-                                  <<>> -> [];
-                                  Map when is_map(Map) -> maps:to_list(Map)
-                              end;
+                              from_ejson(jiffy:decode(Body));
                      false -> []
                  end,
     QueryParams ++ BodyParams.
@@ -164,3 +160,9 @@ jsonify(Code, Headers, Response, Req) ->
 
 reply(Code, Text, Req) ->
     cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
+
+%% For compatible previous params format
+from_ejson({L}) ->
+    [{Name, from_ejson(Value)} || {Name, Value} <- L];
+from_ejson(T) -> T.
+
