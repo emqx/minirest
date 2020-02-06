@@ -162,7 +162,8 @@ reply(Code, Text, Req) ->
     cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
 
 %% For compatible previous params format
+from_ejson([{_}|_] = L) ->
+    [from_ejson(E) || E <- L];
 from_ejson({L}) ->
     [{Name, from_ejson(Value)} || {Name, Value} <- L];
 from_ejson(T) -> T.
-
