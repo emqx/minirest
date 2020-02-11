@@ -150,7 +150,7 @@ jsonify({Code, Headers, Response}, Req) when is_integer(Code) ->
 jsonify(Code, Response, Req) ->
     jsonify(Code, #{}, Response, Req).
 jsonify(Code, Headers, Response, Req) ->
-    try jiffy:encode(Response) of
+    try jiffy:encode(Response, [force_utf8]) of
         Json ->
             cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
     catch
