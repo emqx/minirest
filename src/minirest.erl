@@ -193,7 +193,10 @@ to_map_test() ->
     [#{a := b, c := d}, #{e := f}] = to_map([[{a, b}, {c, d}], [{e, f}]]),
     #{a := #{b := c}} = to_map([{a, [{b, c}]}]),
     #{a := #{b := c}} = to_map([{a, #{b => c}}]),
-    %% Can't convert
-    #{a := [{b, c}]} = to_map(#{a => [{b, c}]}).
+
+    %% Don't convert
+    #{a := [{b, c}]} = to_map(#{a => [{b, c}]}),
+    #{a := b} = to_map(#{a => b}),
+    [#{}, #{a := b}] = to_map([#{}, #{a => b}]).
 
 -endif.
