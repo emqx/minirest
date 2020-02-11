@@ -171,10 +171,6 @@ to_map([{_, _}|_] = L) ->
       fun({Name, Value}, Acc) ->
         Acc#{Name => to_map(Value)}
       end, #{}, L);
-to_map([M|_] = L) when is_map(M) ->
-    [to_map(E) || E <- L];
-to_map(M) when is_map(M) ->
-    maps:map(fun(_, V) -> to_map(V) end, M);
 to_map(T) -> T.
 
 format_msg(Message)
@@ -195,7 +191,9 @@ format_msg(Message) when is_tuple(Message) ->
 to_map_test() ->
     #{a := b} = to_map([{a, b}]),
     [#{a := b, c := d}, #{e := f}] = to_map([[{a, b}, {c, d}], [{e, f}]]),
+    #{a := #{b := c}} = to_map([{a, [{b, c}]}]),
     #{a := #{b := c}} = to_map([{a, #{b => c}}]),
-    #{a := #{b := c}} = to_map(#{a => [{b, c}]}).
+    %% Can't convert
+    #{a := [{b, c}]} = to_map(#{a => [{b, c}]}).
 
 -endif.
