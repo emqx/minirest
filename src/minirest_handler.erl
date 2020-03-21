@@ -127,7 +127,7 @@ parse_params(Req) ->
     QueryParams = cowboy_req:parse_qs(Req),
     BodyParams = case cowboy_req:has_body(Req) of
                      true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                              from_ejson(jiffy:decode(Body));
+                              json_decode(Body);
                      false -> []
                  end,
     QueryParams ++ BodyParams.
@@ -150,7 +150,7 @@ jsonify({Code, Headers, Response}, Req) when is_integer(Code) ->
 jsonify(Code, Response, Req) ->
     jsonify(Code, #{}, Response, Req).
 jsonify(Code, Headers, Response, Req) ->
-    try jiffy:encode(Response, [force_utf8]) of
+    try json_encode(Response) of
         Json ->
             cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
     catch
@@ -160,6 +160,17 @@ jsonify(Code, Headers, Response, Req) ->
 
 reply(Code, Text, Req) ->
     cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
+
+%% JSON
+json_encode(D) ->
+    to_binary(jiffy:encode(D, [force_utf8])).
+
+to_binary(B) when is_binary(B) -> B;
+to_binary(L) when is_list(L) ->
+    iolist_to_binary(L).
+
+json_decode(B) ->
+    from_ejson(jiffy:decode(B)).
 
 %% For compatible previous params format
 from_ejson([{_}|_] = L) ->
