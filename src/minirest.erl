@@ -14,153 +14,116 @@
 
 -module(minirest).
 
--export([ start_http/3
-        , start_https/3
-        , stop_http/1
-        ]).
+-export([ start_listener/2
+        , start_listener/3
+        , stop_listener/1
+        , pipeline/3
+        , default_middlewares/0]).
 
--export([handler/1]).
+-export([ within/2
+        , within/3]).
 
--export([ return/0
-        , return/1
-        ]).
+% -export([routes/1]).
 
-%% Cowboy callback
--export([init/2]).
+-import(proplists, [get_value/2]).
 
--define(SUCCESS, 0).
+%%============================================================================
+%% API
+%%============================================================================
 
--type(option() :: {authorization, fun()}).
--type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
+start_listener(Ref, Opts) ->
+    start_listener(Ref, Opts, default_middlewares()).
 
--export_type([ option/0
-             , handler/0
-             ]).
-
-%%------------------------------------------------------------------------------
-%% Start/Stop Http
-%%------------------------------------------------------------------------------
-
--spec(start_http(atom(), list(), list()) -> {ok, pid()}).
-start_http(ServerName, Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    {ok, _} = cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}),
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
-
--spec(start_https(atom(), list(), list()) -> {ok, pid()}).
-start_https(ServerName, Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    {ok, _} = cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}),
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
-
--spec(stop_http(atom()) -> ok).
-stop_http(ServerName) ->
-    cowboy:stop_listener(ServerName).
-
-get_port(#{socket_opts := SocketOpts}) ->
-    proplists:get_value(port, SocketOpts, 18083).
-
-map({Prefix, MFArgs}) ->
-    map({Prefix, MFArgs, []});
-map({Prefix, MFArgs, Options}) ->
-    #{prefix => Prefix, mfargs => MFArgs, options => maps:from_list(Options)}.
-
-handlers(Handlers) ->
-    lists:map(fun
-        ({Prefix, minirest, HHs}) -> {Prefix, minirest, [map(HH) || HH <- HHs]};
-        (Handler) -> Handler
-    end, Handlers).
-
-%%------------------------------------------------------------------------------
-%% Handler helper
-%%------------------------------------------------------------------------------
-
--spec(handler(minirest_handler:config()) -> handler()).
-handler(Config) -> minirest_handler:init(Config).
-
-%%------------------------------------------------------------------------------
-%% Cowboy callbacks
-%%------------------------------------------------------------------------------
-
-init(Req, Opts) ->
-    Req1 = handle_request(Req, Opts),
-    {ok, Req1, Opts}.
-
-%% Callback
-handle_request(Req, Handlers) ->
-    case match_handler(binary_to_list(cowboy_req:path(Req)), Handlers) of
-        {ok, Path, Handler} ->
-            try
-                apply_handler(Req, Path, Handler)
-            catch _:Error:Stacktrace ->
-                internal_error(Req, Error, Stacktrace)
-            end;
-        not_found ->
-            cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
+start_listener(Ref, Opts, Middlewares) ->
+    {ok, Proto, Opts1} = take(proto, Opts, http),
+    StartFun = case Proto of
+                   http -> start_clear;
+                   https -> start_tls
+               end,
+    {ok, CurApp} = application:get_application(),
+    %% TODO: scan_list -> better name 
+    {ok, ScanList, Opts2} = take(scan_list, Opts1, [CurApp]),
+    Dispatch = cowboy_router:compile(routes(ScanList)),
+    {ok, _} = cowboy:StartFun(Ref, Opts2, #{env => #{dispatch => Dispatch},
+                                            middlewares => [cowboy_router] ++ Middlewares ++ [cowboy_handler]}),
+    case proplists:get_value(port, Opts2) of
+        undefined -> io:format("Start ~s listener successfully.~n", [Ref]);
+        Port -> io:format("Start ~s listener on ~p successfully.~n", [Ref, Port])
     end.
 
-match_handler(_Path, []) ->
-    not_found;
-match_handler(Path, [Handler = #{prefix := Prefix} | Handlers]) ->
-    case string:prefix(Path, Prefix) of
-        nomatch -> match_handler(Path, Handlers);
-        RelPath -> {ok, add_slash(RelPath), Handler}
+-spec(stop_listener(atom()) -> ok).
+stop_listener(Ref) ->
+    cowboy:stop_listener(Ref).
+
+pipeline([], Req, Env) ->
+    {ok, Req, Env};
+
+pipeline([Fun | More], Req, Env) ->
+    case Fun(Req, Env) of
+        {ok, NReq} ->
+            pipeline(More, NReq, Env);
+        {ok, NReq, NEnv} ->
+            pipeline(More, NReq, NEnv);
+        {stop, NReq} ->
+            {stop, NReq}
     end.
 
-add_slash("/" ++ _ = Path) -> Path;
-add_slash(Path) -> "/" ++ Path.
+default_middlewares() ->
+    [minirest_middleware].
 
-apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
-    case AuthFun(Req) of
-        true  -> apply_handler(Req, Path, MFArgs);
-        false ->
-            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
-                             <<"UNAUTHORIZED">>, Req)
-    end;
+within(Value, Min, infinity) ->
+    Value >= Min;
+within(Value, infinity, Max) ->
+    Value =< Max;
+within(Value, Min, Max)  ->
+    Value >= Min andalso Value =< Max.
 
-apply_handler(Req, Path, #{mfargs := MFArgs}) ->
-    apply_handler(Req, Path, MFArgs);
+within(Value, Enums) ->
+    lists:member(Value, Enums).
 
-apply_handler(Req, Path, {M, F, Args}) ->
-    erlang:apply(M, F, [Path, Req | Args]).
+%%============================================================================
+%% Internal Functions
+%%============================================================================
 
-internal_error(Req, Error, Stacktrace) ->
-    error_logger:error_msg("~s ~s error: ~p, stacktrace:~n~p",
-                           [cowboy_req:method(Req), cowboy_req:path(Req), Error, Stacktrace]),
-    cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
+routes(Apps) ->
+    Paths = lists:foldl(fun(App, Acc) ->
+                            {ok, Modules} = application:get_key(App, modules),
+                            paths(Modules) ++ Acc
+                        end, [], Apps),
+    [{'_', Paths}].
 
-%%------------------------------------------------------------------------------
-%% Return
-%%------------------------------------------------------------------------------
+paths(Modules) when is_list(Modules) ->
+    paths(Modules, []).
 
-return() ->
-    {ok, #{code => ?SUCCESS}}.
+paths([], Paths) ->
+    Paths;
+paths([Module | More], Paths) ->
+    NPaths = lists:foldl(
+                 fun({http_api, [#{private := true}]}, Acc) ->
+                     Acc;
+                    ({http_api, [Meta = #{resource := Resource}]}, Acc) ->
+                     Handler = maps:get(handler, Meta, Module),
+                     PathMatch = "/api/v4" ++ ensure_prefix_slash(Resource),
+                     [{PathMatch, minirest_handler, Meta#{handler => Handler}} | Acc];
+                    (_, Acc) ->
+                     Acc
+                 end, [], Module:module_info(attributes)),
+    paths(More, NPaths ++ Paths).
 
-return(ok) ->
-    {ok, #{code => ?SUCCESS}};
-return({ok, #{data := Data, meta := Meta}}) ->
-    {ok, #{code => ?SUCCESS,
-           data => Data,
-           meta => Meta}};
-return({ok, Data}) ->
-    {ok, #{code => ?SUCCESS,
-           data => Data}};
-return({ok, Code, Message}) when is_integer(Code) ->
-    {ok, #{code => Code,
-           message => format_msg(Message)}};
-return({ok, Data, Meta}) ->
-    {ok, #{code => ?SUCCESS,
-           data => Data,
-           meta => Meta}};
-return({error, Message}) ->
-    {ok, #{message => format_msg(Message)}};
-return({error, Code, Message}) ->
-    {ok, #{code => Code,
-           message => format_msg(Message)}}.
+ensure_prefix_slash("/" ++ _ = Path) -> Path;
+ensure_prefix_slash(Path) -> "/" ++ Path.
 
-format_msg(Message)
-  when is_atom(Message);
-       is_binary(Message) -> Message;
+take(Key, List) ->
+	take(Key, List, undefined).
 
-format_msg(Message) when is_tuple(Message) ->
-    iolist_to_binary(io_lib:format("~p", [Message])).
+take(Key, List, Default) ->
+    take(Key, List, [], Default).
+
+take(_, [], Acc, Default) ->
+	{ok, Default, lists:reverse(Acc)};
+take(Key, [{Key, Value} | More], Acc, _) ->
+	{ok, Value, lists:reverse(Acc, More)};
+take(Key, [Key | More], Acc, _) ->
+	{ok, true, lists:reverse(Acc, More)};
+take(Key, [Item | More], Acc, Default) ->
+	take(Key, More, [Item | Acc], Default).
