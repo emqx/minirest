@@ -140,6 +140,8 @@ jsonify(ok, Req) ->
     jsonify(200, <<"ok">>, Req);
 jsonify({ok, Response}, Req) ->
     jsonify(200, Response, Req);
+jsonify({ok, Headers, Response}, Req) ->
+    cowboy_req:reply(200, Headers, Response, Req);
 jsonify({error, Reason}, Req) ->
     jsonify(500, Reason, Req);
 jsonify({Code, Response}, Req) when is_integer(Code) ->
