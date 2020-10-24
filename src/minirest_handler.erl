@@ -177,6 +177,8 @@ json_decode(B) ->
 %% For compatible previous params format
 from_ejson([{_}|_] = L) ->
     [from_ejson(E) || E <- L];
+from_ejson({[]}) ->
+    [{}];
 from_ejson({L}) ->
     [{Name, from_ejson(Value)} || {Name, Value} <- L];
 from_ejson(T) -> T.
