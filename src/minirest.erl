@@ -48,6 +48,7 @@ start_http(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
     case cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
         {ok, _}  -> ok;
+        {error, {already_started, _}} -> ok;
         {error, eaddrinuse} ->
             ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
             error(eaddrinuse);
