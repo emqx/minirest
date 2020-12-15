@@ -72,7 +72,7 @@ start_https(ServerName, Options, Handlers) ->
     end,
     io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
 
--spec(stop_http(atom()) -> ok).
+-spec(stop_http(atom()) -> ok | {error, any()}).
 stop_http(ServerName) ->
     cowboy:stop_listener(ServerName).
 
