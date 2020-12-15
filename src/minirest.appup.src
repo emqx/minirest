@@ -1,12 +1,12 @@
 %%-*-: erlang -*-
-{"0.3.2",
+{"0.3.3",
  [
   {"0.3.0",
     [ {load_module, minirest_handler, brutal_purge, soft_purge, []}
     , {load_module, minirest, brutal_purge, soft_purge, []}
     ]
   },
-  {"0.3.1",
+  {<<"0.3.*">>,
     [ {load_module, minirest, brutal_purge, soft_purge, []}
     ]
   }
@@ -17,7 +17,7 @@
     , {load_module, minirest, brutal_purge, soft_purge, []}
     ]
   },
-  {"0.3.1",
+  {<<"0.3.*">>,
     [ {load_module, minirest, brutal_purge, soft_purge, []}
     ]
   }
