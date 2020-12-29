@@ -18,7 +18,7 @@
         , dispatch/4
         ]).
 
--type(config() :: #{apps => list(atom()), modules => list(module())}).
+-type(config() :: #{apps => [atom()], modules => [module()], except => [atom()], filter => fun() }).
 
 -export_type([config/0]).
 
