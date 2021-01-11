@@ -81,7 +81,11 @@ dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
             error_logger:error_msg("Params error: ~p", [Reason]),
             reply(400, <<"Bad Request">>, Req);
         Params ->
-            jsonify(erlang:apply(Mod, Fun, [Bindings, Params]), Req)
+            case erlang:apply(Mod, Fun, [Bindings, Params]) of
+                {file, Headers, {sendfile, _, _, _, _} = SendFile} ->
+                    cowboy_req:reply(200, Headers, SendFile, Req);
+                Return -> jsonify(Return, Req)
+            end
     end.
 
 format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
