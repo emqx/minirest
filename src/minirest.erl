@@ -14,6 +14,8 @@
 
 -module(minirest).
 
+-include_lib("kernel/include/file.hrl").
+
 -export([ start_http/3
         , start_https/3
         , stop_http/1
@@ -23,6 +25,7 @@
 
 -export([ return/0
         , return/1
+        , return_file/1
         ]).
 
 %% Cowboy callback
@@ -151,6 +154,14 @@ internal_error(Req, Error, Stacktrace) ->
 %%------------------------------------------------------------------------------
 %% Return
 %%------------------------------------------------------------------------------
+
+return_file(File) ->
+    {ok, #file_info{size = Size}} = file:read_file_info(File),
+    Headers = #{
+      <<"content-type">> => <<"application/octet-stream">>,
+      <<"content-disposition">> => iolist_to_binary("attachment; filename=" ++ filename:basename(File))
+    },
+    {file, Headers, {sendfile, 0, Size, File}}.
 
 return() ->
     {ok, #{code => ?SUCCESS}}.
