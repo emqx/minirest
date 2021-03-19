@@ -211,7 +211,7 @@ format_msg(Message)
   when is_atom(Message);
        is_binary(Message) -> Message;
 
-format_msg(Message) when is_tuple(Message) ->
+format_msg(Message) when is_tuple(Message); is_list(Message)  ->
     iolist_to_binary(io_lib:format("~p", [Message])).
 
 %%====================================================================
