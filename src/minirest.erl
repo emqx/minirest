@@ -207,12 +207,10 @@ to_map(M) when is_map(M) ->
     maps:map(fun(_, V) -> to_map(V) end, M);
 to_map(T) -> T.
 
-format_msg(Message)
-  when is_atom(Message);
-       is_binary(Message) -> Message;
-
-format_msg(Message) when is_tuple(Message) ->
-    iolist_to_binary(io_lib:format("~p", [Message])).
+format_msg(Message) ->
+    try unicode:characters_to_binary(Message)
+    catch error : badarg -> iolist_to_binary(io_lib:format("~0p", [Message]))
+    end.
 
 %%====================================================================
 %% EUnits
