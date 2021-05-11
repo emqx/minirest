@@ -1,0 +1,85 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "version": "V-0.0.1",
+        "title": "Title",
+        "description": "description",
+        "contact": {
+            "email": "emqx@emq.com",
+            "name": "EMQ X homepage",
+            "url": "http://www.emqx.io"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
+        }
+    },
+    "paths": {
+        "/description": {
+            "get": {
+                "tags": [
+                    "TAG"
+                ],
+                "description": "API description",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "page",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 10,
+                            "minimum": 0,
+                            "minLength": 10,
+                            "oneOf": []
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "size",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "success": {
+                                        "value": {
+                                            "code": 0,
+                                            "msg": "success"
+                                        }
+                                    },
+                                    "error": {
+                                        "value": {
+                                            "code": 1,
+                                            "msg": "error"
+                                        }
+                                    }
+                                },
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "msg": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "description": "200 OK"
+                    }
+                }
+            }
+        }
+    }
+}

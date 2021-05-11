@@ -13,47 +13,88 @@
 %% limitations under the License.
 
 -module(minirest).
+-behaviour(gen_server).
 
--export([ start_listener/2
-        , start_listener/3
+-include_lib("include/minirest.hrl").
+
+-export([ start_listener/4
+        , start_listener/5
         , stop_listener/1
         , pipeline/3
-        , default_middlewares/0]).
+        , find_api_spec/2]).
 
--export([ within/2
-        , within/3]).
+-export([code_change/3,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         init/1,
+         terminate/2]).
 
-% -export([routes/1]).
+-record(state, {
+    http_api :: map()
+}).
 
--import(proplists, [get_value/2]).
+start_listener(ServerRoot, ServerName, CowboyOpts, MinirestOpts) ->
+    start_listener(ServerRoot, ServerName, CowboyOpts, MinirestOpts, []).
 
-%%============================================================================
-%% API
-%%============================================================================
+start_listener(ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications) ->
+    {ok, _} = gen_server:start_link({local, ServerName}, ?MODULE,
+    [ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications], []).
 
-start_listener(Ref, Opts) ->
-    start_listener(Ref, Opts, default_middlewares()).
-
-start_listener(Ref, Opts, Middlewares) ->
-    {ok, Proto, Opts1} = take(proto, Opts, http),
-    StartFun = case Proto of
+init([ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications]) ->
+    process_flag(trap_exit, true),
+    StartFun = case proplists:get_value(application, CowboyOpts, http) of
                    http -> start_clear;
                    https -> start_tls
                end,
-    {ok, CurApp} = application:get_application(),
-    %% TODO: scan_list -> better name 
-    {ok, ScanList, Opts2} = take(scan_list, Opts1, [CurApp]),
-    Dispatch = cowboy_router:compile(routes(ScanList)),
-    {ok, _} = cowboy:StartFun(Ref, Opts2, #{env => #{dispatch => Dispatch},
-                                            middlewares => [cowboy_router] ++ Middlewares ++ [cowboy_handler]}),
-    case proplists:get_value(port, Opts2) of
-        undefined -> io:format("Start ~s listener successfully.~n", [Ref]);
-        Port -> io:format("Start ~s listener on ~p successfully.~n", [Ref, Port])
-    end.
+    Routers = routes(ServerRoot, Applications),
+    Dispatch = cowboy_router:compile([
+        {'_', [{'_', minirest_dispatcher, #{server_name => ServerName}}]}
+    ]),
+    MiddleWares = maps:get(middlewares, MinirestOpts, []),
+    Envs = case MiddleWares of
+        [] -> #{env => #{dispatch => Dispatch}};
+        _ -> #{env => #{dispatch => Dispatch},
+               middlewares => MiddleWares}
+    end,
+    ct:print("Envs => :~p~n", [Envs]),
+    {ok, _} = cowboy:StartFun(ServerName, CowboyOpts, Envs),
+    {ok, #state{http_api = #{routers => Routers}}}.
+
+%% find api spec
+handle_call({find_api_spec, Path}, _From,
+            #state{http_api = #{routers := Routers}} = State) ->
+    [MainRouterMap | _] = Routers,
+    case maps:find(Path, MainRouterMap) of
+        {ok, Router} -> {reply, {ok, Router}, State};
+        error -> {reply, not_fond, State}
+    end;
+
+handle_call(_Request, _From, State) ->
+    {reply, ignored, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+%%----------------------------------------------------========
+%% API
+%%----------------------------------------------------========
+
+-spec(find_api_spec(GenServerName::atom(), Path::list()) -> {ok, term()}).
+find_api_spec(GenServerName, Path) ->
+    gen_server:call(GenServerName, {find_api_spec, Path}, 1000).
 
 -spec(stop_listener(atom()) -> ok).
-stop_listener(Ref) ->
-    cowboy:stop_listener(Ref).
+stop_listener(ServerName) ->
+    cowboy:stop_listener(ServerName).
 
 pipeline([], Req, Env) ->
     {ok, Req, Env};
@@ -67,63 +108,37 @@ pipeline([Fun | More], Req, Env) ->
         {stop, NReq} ->
             {stop, NReq}
     end.
-
-default_middlewares() ->
-    [minirest_middleware].
-
-within(Value, Min, infinity) ->
-    Value >= Min;
-within(Value, infinity, Max) ->
-    Value =< Max;
-within(Value, Min, Max)  ->
-    Value >= Min andalso Value =< Max.
-
-within(Value, Enums) ->
-    lists:member(Value, Enums).
-
-%%============================================================================
+%%----------------------------------------------------========
 %% Internal Functions
-%%============================================================================
-
-routes(Apps) ->
-    Paths = lists:foldl(fun(App, Acc) ->
-                            {ok, Modules} = application:get_key(App, modules),
-                            paths(Modules) ++ Acc
-                        end, [], Apps),
-    [{'_', Paths}].
-
-paths(Modules) when is_list(Modules) ->
-    paths(Modules, []).
-
-paths([], Paths) ->
-    Paths;
-paths([Module | More], Paths) ->
-    NPaths = lists:foldl(
-                 fun({http_api, [#{private := true}]}, Acc) ->
-                     Acc;
-                    ({http_api, [Meta = #{resource := Resource}]}, Acc) ->
-                     Handler = maps:get(handler, Meta, Module),
-                     PathMatch = "/api/v4" ++ ensure_prefix_slash(Resource),
-                     [{PathMatch, minirest_handler, Meta#{handler => Handler}} | Acc];
-                    (_, Acc) ->
-                     Acc
-                 end, [], Module:module_info(attributes)),
-    paths(More, NPaths ++ Paths).
+%%----------------------------------------------------========
 
 ensure_prefix_slash("/" ++ _ = Path) -> Path;
 ensure_prefix_slash(Path) -> "/" ++ Path.
 
-take(Key, List) ->
-	take(Key, List, undefined).
+routes(ServerRoot, Applications) ->
+    lists:foldl(
+        fun(App, _Acc) ->
+            {ok, Modules} = application:get_env(App, modules),
+            paths(ServerRoot, Modules)
+        end,
+    [], Applications).
 
-take(Key, List, Default) ->
-    take(Key, List, [], Default).
-
-take(_, [], Acc, Default) ->
-	{ok, Default, lists:reverse(Acc)};
-take(Key, [{Key, Value} | More], Acc, _) ->
-	{ok, Value, lists:reverse(Acc, More)};
-take(Key, [Key | More], Acc, _) ->
-	{ok, true, lists:reverse(Acc, More)};
-take(Key, [Item | More], Acc, Default) ->
-	take(Key, More, [Item | Acc], Default).
+paths(ServerRoot, Modules) ->
+    lists:foldl(
+        fun(Module, _Acc) ->
+            [begin
+                Path = maps:get(path, MetaData),
+                Method = maps:get(method, MetaData),
+                Func = maps:get(func, MetaData),
+                Parameters = maps:get(parameters, MetaData),
+                ApiSpec = #{
+                    path => Path,
+                    method => Method,
+                    handler => Module:module_info(module),
+                    func => Func,
+                    parameters => Parameters
+                },
+                #{ServerRoot ++ ensure_prefix_slash(Path) => ApiSpec}
+            end || {http_api, [MetaData | _]} <- Module:module_info(attributes)]
+        end,
+    [], Modules).

@@ -17,4 +17,6 @@ minirest.d
 _build/
 rebar.lock
 rebar3.crashdump
-.rebar3/
+rebar3/
+.vscode/
+rebar3
