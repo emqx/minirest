@@ -2,41 +2,44 @@
 %% @author: wwhai
 %% --------------------------------------------------------------------
 -module(minirest_cors_middleware).
--behaviour(cowboy_middleware).
+
+%% API.
 -export([execute/2]).
--include_lib("include/minirest.hrl").
-%%-------------------------------------------------------------
-%% Callback
-%%-------------------------------------------------------------
+
+%% API.
+
+-spec execute(Req, Env) -> {ok | stop, Req, Env} when Req :: cowboy_req:req(), Env :: any().
+execute(#{headers := #{<<"origin">> := HeaderVal}} = Req, Env) ->
+    %%AllowedOrigins = '*',
+    AllowedOrigins = '*',
+
+    %% NOTE: we assume we always deal with single origin
+    [Val] = cow_http_hd:parse_origin(HeaderVal),
+    case check_origin(Val, AllowedOrigins) of
+        true -> handle_cors_request(HeaderVal, Req, Env);
+        _ -> {ok, Req, Env}
+    end;
 execute(Req, Env) ->
-    ct:print("minirest_cors_middleware => :~p~n", [Env]),
-    try process_cors(Req, Env)
-    catch
-        error:Error:Stacktrace ->
-            io:format("Error: ~p, Stacktrace: ~p", [Error, Stacktrace]),
-            {ok, minirest_req:server_internal_error(Error, Stacktrace, Req), Env}
+    {ok, Req, Env}.
+
+-spec handle_cors_request(binary(), cowboy_req:req(), any()) -> cowboy_req:req().
+handle_cors_request(Origin, #{method := Method} = Req, Env) ->
+    Req2 = cowboy_req:set_resp_header(<<"access-control-allow-origin">>, Origin, Req),
+    Req3 = cowboy_req:set_resp_header(<<"vary">>, <<"Origin">>, Req2),
+    case Method of
+        <<"OPTIONS">> ->
+            Req4 = cowboy_req:set_resp_header(<<"access-control-allow-methods">>, <<"GET, PUT">>, Req3),
+            Req5 = cowboy_req:set_resp_header(<<"access-control-allow-headers">>, <<"Authorization">>, Req4),
+            Req6 = cowboy_req:set_resp_header(<<"access-control-max-age">>, <<"0">>, Req5),
+            Req7 = cowboy_req:reply(200, Req6),
+            {stop, Req7};
+        _ ->
+            {ok, Req3, Env}
     end.
 
-process_cors(Req, Env) ->
-    Method = cowboy_req:method(Req),
-    Headers = cowboy_req:headers(Req),
-    do_process_cors(Method, Headers, Req, Env).
-
-%% Preflight Request or Normal OPTIONS Request
-do_process_cors(<<"OPTIONS">>, #{<<"origin">> := _Origin,
-                                 <<"access-control-request-method">> := _Method}, Req, _Env) ->
-    RespHeaders = #{<<"access-control-allow-origin">> => <<"*">>,
-                    <<"access-control-allow-methods">> => <<"*">>,
-                    <<"access-control-allow-headers">> => <<"*">>,
-                    <<"access-control-max-age">> => <<"86400">>},
-    {stop, minirest_req:reply(200, RespHeaders, Req)};
-do_process_cors(<<"OPTIONS">>, #{<<"origin">> := _}, Req, _Env) ->
-    {stop, minirest_req:reply(200, Req)};
-do_process_cors(<<"OPTIONS">>, _, Req, #{handler_opts := #{allowed_methods := Allowed}}) ->
-    RespHeaders = #{<<"allow">> => minirest_req:serialize_allowed_methods(Allowed)},
-    {stop, minirest_req:reply(204, RespHeaders, Req)};
-%% Simple Request
-do_process_cors(_, #{<<"origin">> := _Origin}, Req, _Env) ->
-    {ok, cowboy_req:set_resp_header(<<"access-control-allow-origin">>, <<"*">>, Req)};
-do_process_cors(_, _, Req, _Env) ->
-    {ok, Req}.
+-spec check_origin(Origin, [Origin] | '*') -> boolean() when Origin :: {binary(), binary(), 0..65535} | reference().
+check_origin(Val, '*') when is_reference(Val) -> true;
+check_origin(_, '*') -> true;
+check_origin(Val, Val) -> true;
+check_origin(Val, L) when is_list(L) -> lists:member(Val, L);
+check_origin(_, _) -> false.

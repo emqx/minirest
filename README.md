@@ -61,15 +61,14 @@ application:set_env(minirest_example, modules, [minirest_example_api]),
 minirest:start_listener("/api/v4",
                        minirest_example,
                        [{port, 9990}],
-                       #{middlewares => [minirest_cors_middleware,
-                                         minirest_global_middleware]},
+                       #{middlewares => [minirest_cors_middleware]},
                        [minirest_example]).
 ```
 
 ## Stop the REST server
 
 ```
-minirest:stop_http(demo_rest_server, 8080).
+minirest:stop_http(demo_rest_server).
 ```
 
 ## License

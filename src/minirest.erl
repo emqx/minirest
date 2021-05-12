@@ -21,7 +21,7 @@
         , start_listener/5
         , stop_listener/1
         , pipeline/3
-        , find_api_spec/2]).
+        , find_api_spec/3]).
 
 -export([code_change/3,
          handle_call/3,
@@ -34,6 +34,9 @@
     http_api :: map()
 }).
 
+%%-----------------------------------------------------------------------
+%% get_env callback
+%%-----------------------------------------------------------------------
 start_listener(ServerRoot, ServerName, CowboyOpts, MinirestOpts) ->
     start_listener(ServerRoot, ServerName, CowboyOpts, MinirestOpts, []).
 
@@ -49,7 +52,8 @@ init([ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications]) ->
                end,
     Routers = routes(ServerRoot, Applications),
     Dispatch = cowboy_router:compile([
-        {'_', [{'_', minirest_dispatcher, #{server_name => ServerName}}]}
+        {'_', [{'_', minirest_dispatcher, #{server_name => ServerName,
+                                            server_root => ServerRoot}}]}
     ]),
     MiddleWares = maps:get(middlewares, MinirestOpts, []),
     Envs = case MiddleWares of
@@ -57,17 +61,15 @@ init([ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications]) ->
         _ -> #{env => #{dispatch => Dispatch},
                middlewares => MiddleWares}
     end,
-    ct:print("Envs => :~p~n", [Envs]),
     {ok, _} = cowboy:StartFun(ServerName, CowboyOpts, Envs),
     {ok, #state{http_api = #{routers => Routers}}}.
 
 %% find api spec
 handle_call({find_api_spec, Path}, _From,
-            #state{http_api = #{routers := Routers}} = State) ->
-    [MainRouterMap | _] = Routers,
-    case maps:find(Path, MainRouterMap) of
+            #state{http_api = #{routers := RoutersSpec}} = State) ->
+    case maps:find(Path, RoutersSpec) of
         {ok, Router} -> {reply, {ok, Router}, State};
-        error -> {reply, not_fond, State}
+        error -> {reply, {not_fond, Path}, State}
     end;
 
 handle_call(_Request, _From, State) ->
@@ -79,41 +81,51 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(Reason, _State) ->
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-%%----------------------------------------------------========
-%% API
-%%----------------------------------------------------========
+%%---------------------------------------------------------------
+%% Private functions
+%%---------------------------------------------------------------
 
--spec(find_api_spec(GenServerName::atom(), Path::list()) -> {ok, term()}).
-find_api_spec(GenServerName, Path) ->
-    gen_server:call(GenServerName, {find_api_spec, Path}, 1000).
+-spec(find_api_spec(GenServerName::atom(),
+                    Method::atom(),
+                    Path::list()) -> {ok, term()}).
+find_api_spec(GenServerName, Method, Path) ->
+    gen_server:call(GenServerName,
+                   {find_api_spec, minirest_utils:make_path_prefix(Method, Path)},
+                    1000).
 
 -spec(stop_listener(atom()) -> ok).
 stop_listener(ServerName) ->
     cowboy:stop_listener(ServerName).
 
-pipeline([], Req, Env) ->
-    {ok, Req, Env};
-
-pipeline([Fun | More], Req, Env) ->
-    case Fun(Req, Env) of
-        {ok, NReq} ->
-            pipeline(More, NReq, Env);
-        {ok, NReq, NEnv} ->
-            pipeline(More, NReq, NEnv);
-        {stop, NReq} ->
-            {stop, NReq}
-    end.
-%%----------------------------------------------------========
+%%---------------------------------------------------------------
 %% Internal Functions
-%%----------------------------------------------------========
+%%---------------------------------------------------------------
 
-ensure_prefix_slash("/" ++ _ = Path) -> Path;
-ensure_prefix_slash(Path) -> "/" ++ Path.
+pipeline([], Request, Env) ->
+    {ok, Request, Env};
+
+pipeline([Fun | More], Request, Env) ->
+    try
+        case Fun(Request, Env) of
+            {ok, NRequest} ->
+                pipeline(More, NRequest, Env);
+            {ok, NRequest, NEnv} ->
+                pipeline(More, NRequest, NEnv);
+            {stop, NReq} ->
+                {stop, NReq}
+        end
+    catch
+        _:Error:Stacktrace ->
+            ct:print("Error:Stacktrace => :~p~n", [{Error, Stacktrace}]),
+            logger:error("Error: ~p, Stacktrace: ~p", [Error, Stacktrace]),
+            {stop, minirest_req:server_internal_error(Error, Stacktrace, Request), Env}
+    end.
+
 
 routes(ServerRoot, Applications) ->
     lists:foldl(
@@ -125,8 +137,9 @@ routes(ServerRoot, Applications) ->
 
 paths(ServerRoot, Modules) ->
     lists:foldl(
-        fun(Module, _Acc) ->
-            [begin
+        fun(Module, _) ->
+            lists:foldl(
+            fun({http_api, [MetaData | _]}, Acc) ->
                 Path = maps:get(path, MetaData),
                 Method = maps:get(method, MetaData),
                 Func = maps:get(func, MetaData),
@@ -138,7 +151,11 @@ paths(ServerRoot, Modules) ->
                     func => Func,
                     parameters => Parameters
                 },
-                #{ServerRoot ++ ensure_prefix_slash(Path) => ApiSpec}
-            end || {http_api, [MetaData | _]} <- Module:module_info(attributes)]
-        end,
-    [], Modules).
+                %% #{Method:/api/v4/xxx => #{...}}
+                ApiSpecMap = #{minirest_utils:make_path_prefix(Method,
+                              ServerRoot ++ Path) => ApiSpec},
+                maps:merge(ApiSpecMap, Acc);
+            (_, Acc) ->
+                Acc
+            end, #{}, Module:module_info(attributes))
+        end, [], Modules).

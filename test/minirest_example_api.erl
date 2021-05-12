@@ -3,12 +3,15 @@
 %% --------------------------------------------------------------------
 -module(minirest_example_api).
 -compile([export_all, nowarn_export_all]).
+
+%% for openapi 'tags'
 -api_tag("example").
-% API
+%----------------------------------------------------------------------
+%% get test
 -http_api(#{path => "/example",
             func => example_get,
             method => 'GET',
-            description => "example api",
+            description => "example_get",
             parameters =>[
                 #{
                     in => "path",
@@ -35,9 +38,71 @@
             responses =>[]
             }
 ).
+%% post test
+-http_api(#{path => "/example",
+            func => example_post,
+            method => 'POST',
+            description => "example_post",
+            parameters =>[],
+            % for next edition
+            responses =>[]
+            }
+).
+%% put test
+-http_api(#{path => "/example",
+            func => example_put,
+            method => 'PUT',
+            description => "example_put",
+            parameters =>[],
+            % for next edition
+            responses =>[]
+            }
+).
+%% delete test
+-http_api(#{path => "/example",
+            func => example_delete,
+            method => 'DELETE',
+            description => "example_delete",
+            parameters =>[],
+            % for next edition
+            responses =>[]
+            }
+).
+%% example_invalid_return test
+-http_api(#{path => "/example_invalid_return",
+            func => example_invalid_return,
+            method => 'GET',
+            description => "example_invalid_return",
+            parameters =>[],
+            % for next edition
+            responses =>[]
+            }
+).
+%% method not support test
+-http_api(#{path => "/method_not_support",
+            func => method_not_support,
+            method => 'GET',
+            description => "method_not_support",
+            parameters =>[],
+            % for next edition
+            responses =>[]
+            }
+).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
-example_get(RequestContext) ->
-    ct:print("RequestContext => :~p~n", [RequestContext]),
-    #{k => v}.
+example_get(_Request) ->
+    #{k => example_get}.
+example_post(_Request) ->
+    #{k => example_post}.
+example_put(_Request) ->
+    #{k => example_put}.
+example_delete(_Request) ->
+    #{k => example_delete}.
+
+example_invalid_return(_Request) ->
+    {tuple, test}.
+
+method_not_support(_Request) ->
+    <<"method_not_support">>.

@@ -3,7 +3,8 @@
 %% --------------------------------------------------------------------
 
 -module(minirest_validator).
--export([required/2,
+-export([validate/2,
+         required/2,
          range/3,
          oneof/2,
          validate_value/2
@@ -12,11 +13,59 @@
 %% ----------------------------------------------------
 %% API functions
 %% ----------------------------------------------------
-required(Key, Params) when is_map(Params) ->
-    case maps:find(Key, Params) of
-        {ok, Value} -> Value;
-        error -> throw({throw, "param ~p is required, current params is ~p\n", [Key, Params]})
-    end.
+
+%% validate/1 throw error msg must be binary
+-spec(validate(Parameters::list(), LightWeightRequest::map()) -> ok
+                                                | binary()
+                                                | list()).
+validate(Parameters, LightWeightRequest) ->
+    % throw(<<"_Parameters invalid">>),
+    minirest:pipeline([
+        fun required/2
+    ],
+    Parameters, LightWeightRequest).
+% #{bindings => #{},body => #{},
+%   headers =>
+%       #{<<"content-type">> => <<"application/json">>,
+%         <<"host">> => <<"127.0.0.1:9990">>,
+%         <<"user-agent">> => <<"hackney/1.17.4">>},
+%   qs =>
+%       #{<<"page">> => <<"1">>,<<"size">> => <<"10">>}}
+
+% parameters =>[
+%     #{
+%         in => "path",
+%         name => "page",
+%         required => true,
+%         schema => #{
+%             type => "integer",
+%             maximum => 10,
+%             minimum => 0
+%         }
+%     },
+%     #{
+%         in => "query",
+%         name => "size",
+%         required => true,
+%         schema => #{
+%             type => "integer",
+%             maximum => 10,
+%             minimum => 0
+%         }
+%     }
+% ],
+
+required([], LightWeightRequest) -> {ok, [], LightWeightRequest};
+required(Parameters, LightWeightRequest) when is_list(Parameters) ->
+    % ct:print("Parameters => :~p~n", [Parameters]),
+    ct:print("LightWeightRequest => :~p~n", [LightWeightRequest]),
+    F = fun(#{in := In, name := Name,
+              required := Required,
+              schema := Schema} = Parameter) ->
+              ct:print("Parameter >=> :~p~n", [Parameter])
+        end,
+    lists:foreach(F, Parameters),
+    {ok, Parameters, LightWeightRequest}.
 
 range(Value, Min, Max) ->
     case (Value >= Min) and (Value =< Max) of

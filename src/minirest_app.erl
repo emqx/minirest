@@ -8,10 +8,6 @@
 -export([start/2, stop/1]).
 %%
 start(_StartType, _StartArgs) ->
-    %% TODO i18n
-    % ok = econfig:register_config(?APP, load_i18n(), [autoreload]),
-    % ct:print("|>=> :~p~n", [econfig:get_value(?APP, "http_message")]),
-    % true = econfig:subscribe(?APP),
     minirest_sup:start_link().
 
 stop(_State) -> ok.
