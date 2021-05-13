@@ -47,21 +47,24 @@ t_get(_Config) ->
                            [{port, 9990}],
                            #{middlewares => []},
                            [minirest_example]),
-    R1 = send_request(get, "http://127.0.0.1:9990/api/v4/example?page=1&size=10"),
+    % R1 = send_request(get, "http://127.0.0.1:9990/api/v4/example?page=1&size=10"),
     % R2 = send_request(post, "http://127.0.0.1:9990/api/v4/example"),
     % R3 = send_request(put, "http://127.0.0.1:9990/api/v4/example"),
     % R4 = send_request(delete, "http://127.0.0.1:9990/api/v4/example"),
     % R5 = send_request(get, "http://127.0.0.1:9990/api/v4/no-such-things"),
     % R6 = send_request(get, "http://127.0.0.1:9990/api/v4/example_invalid_return"),
     % R7 = send_request(post, "http://127.0.0.1:9990/api/v4/method_not_support"),
-    ct:print("GET -> :~p~n", [R1]).
+    % ct:print("GET -> :~p~n", [R1]).
     % ct:print("POST -> :~p~n", [R2]),
     % ct:print("PUT -> :~p~n", [R3]),
     % ct:print("DELETE -> :~p~n", [R4]),
     % ct:print("GET2 for 404 -> :~p~n", [R5]),
     % ct:print("GET3 for example invalid return -> :~p~n", [R6]),
     % ct:print("POST2 for method not support -> :~p~n", [R7]).
-
+    R8 = send_request(get, "http://127.0.0.1:9990/api/v4/bindings/hello/world"),
+    R9 = send_request(get, "http://127.0.0.1:9990/api/v4/bindings?k1=1&k2=2"),
+    ct:print("GET bindings test -> :~p~n", [R8]),
+    ct:print("GET bindings test -> :~p~n", [R9]).
 %%--------------------------------------------------------------------
 %% Private
 %%--------------------------------------------------------------------

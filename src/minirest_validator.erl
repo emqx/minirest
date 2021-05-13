@@ -3,6 +3,7 @@
 %% --------------------------------------------------------------------
 
 -module(minirest_validator).
+-include("include/minirest.hrl").
 -export([validate/2,
          required/2,
          range/3,
@@ -42,19 +43,10 @@ validate(Parameters, LightWeightRequest) ->
 %             maximum => 10,
 %             minimum => 0
 %         }
-%     },
-%     #{
-%         in => "query",
-%         name => "size",
-%         required => true,
-%         schema => #{
-%             type => "integer",
-%             maximum => 10,
-%             minimum => 0
-%         }
 %     }
 % ],
 
+%% https://swagger.io/specification
 required([], LightWeightRequest) -> {ok, [], LightWeightRequest};
 required(Parameters, LightWeightRequest) when is_list(Parameters) ->
     % ct:print("Parameters => :~p~n", [Parameters]),
@@ -66,6 +58,13 @@ required(Parameters, LightWeightRequest) when is_list(Parameters) ->
         end,
     lists:foreach(F, Parameters),
     {ok, Parameters, LightWeightRequest}.
+
+get_req_param_value("path", Name) -> ok;
+    
+get_req_param_value("query", Name) -> ok.
+
+
+
 
 range(Value, Min, Max) ->
     case (Value >= Min) and (Value =< Max) of

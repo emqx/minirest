@@ -34,7 +34,6 @@ lowercase_method(Req) ->
 http_uri_decode(Params) when is_map(Params) ->
     maps:map(fun(_, V) -> uri_string:normalize(V) end, Params).
 
-
 %%
 normalize_return_format(T) when is_list(T) -> list_to_binary(T);
 normalize_return_format(T) when is_map(T) -> T;

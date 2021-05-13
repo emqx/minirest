@@ -51,8 +51,12 @@ init([ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications]) ->
                    https -> start_tls
                end,
     Routers = routes(ServerRoot, Applications),
+    ct:print("Routers => :~p~n", [Routers]),
+    %% TODO For I18N but not current version
+    ServerLocal = maps:get(server_local, MinirestOpts, en),
     Dispatch = cowboy_router:compile([
         {'_', [{'_', minirest_dispatcher, #{server_name => ServerName,
+                                            server_local => ServerLocal,
                                             server_root => ServerRoot}}]}
     ]),
     MiddleWares = maps:get(middlewares, MinirestOpts, []),
@@ -152,8 +156,8 @@ paths(ServerRoot, Modules) ->
                     parameters => Parameters
                 },
                 %% #{Method:/api/v4/xxx => #{...}}
-                ApiSpecMap = #{minirest_utils:make_path_prefix(Method,
-                              ServerRoot ++ Path) => ApiSpec},
+                FullPath = minirest_utils:make_path_prefix(Method, ServerRoot ++ Path),
+                ApiSpecMap = #{FullPath => ApiSpec},
                 maps:merge(ApiSpecMap, Acc);
             (_, Acc) ->
                 Acc

@@ -8,34 +8,39 @@
 % Cowboy callback
 %-------------------------------------------------------------------------------------
 
-init(Request, InitState) ->
-    ct:print("[DEBUG] minirest_dispatcher init request:~p~nInitState=> :~p~n", [Request, InitState]),
+init(Request, Envs) ->
+    ct:print("[DEBUG] minirest_dispatcher init request:~p~nInitState=> :~p~n", [Request, Envs]),
     try minirest:pipeline([fun path_filter/2,
                            fun make_light_weight_request/2,
                            fun validate_params/2,
-                           fun next_handler/2], Request, InitState)
+                           fun next_handler/2], Request, Envs)
     catch
         _:Error:Stacktrace ->
             logger:error("Error: ~p, Stacktrace: ~p", [Error, Stacktrace]),
-            {stop, minirest_req:server_internal_error(Error, Stacktrace, Request), InitState}
+            {stop, minirest_req:server_internal_error(Error, Stacktrace, Request), Envs}
     end.
 %-------------------------------------------------------------------------------------
 % APIs
 %-------------------------------------------------------------------------------------
 
 %% filter
-path_filter(Request, InitState) ->
-    GenServerName = maps:get(server_name, InitState),
+path_filter(Request, Envs) ->
+    GenServerName = maps:get(server_name, Envs),
     Method = binary_to_list(maps:get(method, Request)),
     Path = binary_to_list(maps:get(path, Request)),
     case minirest:find_api_spec(GenServerName, Method, Path) of
         {ok, ApiSpec} ->
-            {ok, Request, InitState#{api_spec => ApiSpec}};
+            {ok, Request, Envs#{api_spec => ApiSpec}};
         {not_fond, ErrPath} ->
             minirest_error:not_found(Request, ErrPath)
     end.
 
-make_light_weight_request(Request, InitState) ->
+make_light_weight_request(Request, Envs) ->
+    [M, P, V, NP | Bindings] = string:tokens(maps:get(path, Request), "/"),
+    String = M ++ "/" ++ P ++ "/" ++ V ++ "/" ++ NP,
+    SpecMapKey = lists:foldl(fun(_Bind, AccS) ->
+        AccS ++ "/*"
+    end, String, Bindings),
     {ok, BinBody, NextRequest} = read_body(Request),
     try jiffy:decode(BinBody, [return_maps]) of
         Body ->
@@ -47,7 +52,7 @@ make_light_weight_request(Request, InitState) ->
                                    qs       => minirest_utils:http_uri_decode(maps:from_list(cowboy_req:parse_qs(NextRequest))),
                                    headers  => cowboy_req:headers(NextRequest),
                                    body     => Body},
-            {ok, NextRequest, InitState#{light_weight_req => LightWeightRequest}}
+            {ok, NextRequest, Envs#{light_weight_req => LightWeightRequest}}
     catch
         _:Error:Stacktrace ->
             logger:error("Error: ~p, Stacktrace: ~p", [Error, Stacktrace]),
@@ -56,13 +61,13 @@ make_light_weight_request(Request, InitState) ->
 
 %% validate request params
 validate_params(Request, #{light_weight_req := LightWeightRequest,
-                           api_spec := ApiSpec} = InitState) ->
+                           api_spec := ApiSpec} = Envs) ->
     Parameters =  maps:get(parameters, ApiSpec),
     try
        minirest_validator:validate(Parameters, LightWeightRequest),
        Handler =  maps:get(handler, ApiSpec),
        Func =  maps:get(func, ApiSpec),
-       {ok, Request, InitState#{handler => Handler,
+       {ok, Request, Envs#{handler => Handler,
                                 func => Func}}
     catch
         _:Error:Stacktrace ->
@@ -70,10 +75,10 @@ validate_params(Request, #{light_weight_req := LightWeightRequest,
         minirest_error:invalid_params(Request, Error)
     end.
 
-next_handler(Request, InitState) ->
+next_handler(Request, Envs) ->
     try
-        Handler = maps:get(handler, InitState),
-        Func = maps:get(func, InitState),
+        Handler = maps:get(handler, Envs),
+        Func = maps:get(func, Envs),
         Result = erlang:apply(Handler, Func, [Request]),
         {ok, minirest_req:reply(200, #{},
             #{data => minirest_utils:normalize_return_format(Result)}, Request),

@@ -88,6 +88,16 @@
             responses =>[]
             }
 ).
+%% test path bindings
+-http_api(#{path => "/bindings/[:k1]/[:k2]",
+            func => bindings,
+            method => 'GET',
+            description => "bindings",
+            parameters =>[],
+            % for next edition
+            responses =>[]
+            }
+).
 
 %% ====================================================================
 %% API functions
@@ -106,3 +116,6 @@ example_invalid_return(_Request) ->
 
 method_not_support(_Request) ->
     <<"method_not_support">>.
+
+bindings(_) ->
+    <<"bindings">>.
