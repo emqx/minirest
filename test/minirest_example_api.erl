@@ -8,7 +8,7 @@
 -api_tag("example").
 %----------------------------------------------------------------------
 %% get test
--http_api(#{path => "/example",
+-http_api(#{path => "/example?page=1&size=10",
             func => example_get,
             method => 'GET',
             description => "example_get",
@@ -89,7 +89,7 @@
             }
 ).
 %% test path bindings
--http_api(#{path => "/bindings/[:k1]/[:k2]",
+-http_api(#{path => "/bindings/$k1/$k2?k=v",
             func => bindings,
             method => 'GET',
             description => "bindings",
@@ -103,19 +103,26 @@
 %% API functions
 %% ====================================================================
 example_get(_Request) ->
+    ct:print("Bindings => :~p~n", [_Request]),
     #{k => example_get}.
 example_post(_Request) ->
+    ct:print("Bindings => :~p~n", [_Request]),
     #{k => example_post}.
 example_put(_Request) ->
+    ct:print("Bindings => :~p~n", [_Request]),
     #{k => example_put}.
 example_delete(_Request) ->
+    ct:print("Bindings => :~p~n", [_Request]),
     #{k => example_delete}.
 
 example_invalid_return(_Request) ->
+    ct:print("Bindings => :~p~n", [_Request]),
     {tuple, test}.
 
 method_not_support(_Request) ->
+    ct:print("Bindings => :~p~n", [_Request]),
     <<"method_not_support">>.
 
-bindings(_) ->
-    <<"bindings">>.
+bindings(#{bindings := Bindings} = Request) ->
+    ct:print("Bindings => :~p~n", [Request]),
+    <<"bindings ok">>.

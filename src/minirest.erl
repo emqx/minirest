@@ -21,7 +21,8 @@
         , start_listener/5
         , stop_listener/1
         , pipeline/3
-        , find_api_spec/3]).
+        , find_all_routes/1
+        , find_api_spec/2]).
 
 -export([code_change/3,
          handle_call/3,
@@ -69,11 +70,15 @@ init([ServerRoot, ServerName, CowboyOpts, MinirestOpts, Applications]) ->
     {ok, #state{http_api = #{routers => Routers}}}.
 
 %% find api spec
-handle_call({find_api_spec, Path}, _From,
+handle_call(find_all_routes, _From,
             #state{http_api = #{routers := RoutersSpec}} = State) ->
-    case maps:find(Path, RoutersSpec) of
+    {reply, {ok, maps:keys(RoutersSpec)}, State};
+
+handle_call({find_api_spec, MapKey}, _From,
+            #state{http_api = #{routers := RoutersSpec}} = State) ->
+    case maps:find(MapKey, RoutersSpec) of
         {ok, Router} -> {reply, {ok, Router}, State};
-        error -> {reply, {not_fond, Path}, State}
+        error -> {reply, {not_fond, MapKey}, State}
     end;
 
 handle_call(_Request, _From, State) ->
@@ -94,13 +99,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private functions
 %%---------------------------------------------------------------
 
+find_all_routes(GenServerName) ->
+    gen_server:call(GenServerName, find_all_routes, 1000).
+
 -spec(find_api_spec(GenServerName::atom(),
-                    Method::atom(),
-                    Path::list()) -> {ok, term()}).
-find_api_spec(GenServerName, Method, Path) ->
-    gen_server:call(GenServerName,
-                   {find_api_spec, minirest_utils:make_path_prefix(Method, Path)},
-                    1000).
+                    MapKey::list()) -> {ok, term()}).
+find_api_spec(GenServerName, MapKey) ->
+    gen_server:call(GenServerName, {find_api_spec, MapKey}, 1000).
 
 -spec(stop_listener(atom()) -> ok).
 stop_listener(ServerName) ->
@@ -156,8 +161,7 @@ paths(ServerRoot, Modules) ->
                     parameters => Parameters
                 },
                 %% #{Method:/api/v4/xxx => #{...}}
-                FullPath = minirest_utils:make_path_prefix(Method, ServerRoot ++ Path),
-                ApiSpecMap = #{FullPath => ApiSpec},
+                ApiSpecMap = #{minirest_utils:gen_map_key(Method, ServerRoot, Path) => ApiSpec},
                 maps:merge(ApiSpecMap, Acc);
             (_, Acc) ->
                 Acc

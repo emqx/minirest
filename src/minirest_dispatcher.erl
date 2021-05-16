@@ -9,7 +9,7 @@
 %-------------------------------------------------------------------------------------
 
 init(Request, Envs) ->
-    ct:print("[DEBUG] minirest_dispatcher init request:~p~nInitState=> :~p~n", [Request, Envs]),
+    % ct:print("[DEBUG] minirest_dispatcher init request:~p~nInitState=> :~p~n", [Request, Envs]),
     try minirest:pipeline([fun path_filter/2,
                            fun make_light_weight_request/2,
                            fun validate_params/2,
@@ -28,27 +28,33 @@ path_filter(Request, Envs) ->
     GenServerName = maps:get(server_name, Envs),
     Method = binary_to_list(maps:get(method, Request)),
     Path = binary_to_list(maps:get(path, Request)),
-    case minirest:find_api_spec(GenServerName, Method, Path) of
-        {ok, ApiSpec} ->
-            {ok, Request, Envs#{api_spec => ApiSpec}};
-        {not_fond, ErrPath} ->
-            minirest_error:not_found(Request, ErrPath)
+    {ok, Routes} = minirest:find_all_routes(GenServerName),
+    Matched = lists:foldl(fun(M, Acc) ->
+        case minirest_utils:match_route(M, Method ++ ":" ++ Path) of
+            true -> {true, M};
+            false -> Acc
+        end
+    end, false, Routes),
+    case Matched of
+        {true, M} ->
+            {ok, ApiSpec} = minirest:find_api_spec(GenServerName, M),
+            {ok, ParamsKey} = minirest_utils:fetch_params(M, Method ++ ":" ++ Path),
+            ParamsValue = lists:foldl(fun(V, Acc) ->
+                case string:prefix(V, "$") of
+                    nomatch -> Acc;
+                    KeyName -> Acc ++ [KeyName]
+                end
+            end, [], string:tokens(maps:get(path, ApiSpec), "/")),
+            Bindings = minirest_utils:combine_bindings([], ParamsKey, ParamsValue),
+            {ok, Request, Envs#{api_spec => ApiSpec, bindings => Bindings}};
+        false -> minirest_error:not_found(Request, Path)
     end.
 
-make_light_weight_request(Request, Envs) ->
-    [M, P, V, NP | Bindings] = string:tokens(maps:get(path, Request), "/"),
-    String = M ++ "/" ++ P ++ "/" ++ V ++ "/" ++ NP,
-    SpecMapKey = lists:foldl(fun(_Bind, AccS) ->
-        AccS ++ "/*"
-    end, String, Bindings),
+make_light_weight_request(Request, #{bindings := Bindings} = Envs) ->
     {ok, BinBody, NextRequest} = read_body(Request),
     try jiffy:decode(BinBody, [return_maps]) of
         Body ->
-            Bindings = cowboy_req:bindings(NextRequest),
-            NBindings = maps:fold(fun(K, V, Acc) ->
-                                      maps:put(atom_to_binary(K, utf8), V, Acc)
-                                  end, #{}, Bindings),
-            LightWeightRequest = #{bindings => minirest_utils:http_uri_decode(NBindings),
+            LightWeightRequest = #{bindings => Bindings,
                                    qs       => minirest_utils:http_uri_decode(maps:from_list(cowboy_req:parse_qs(NextRequest))),
                                    headers  => cowboy_req:headers(NextRequest),
                                    body     => Body},
@@ -68,18 +74,20 @@ validate_params(Request, #{light_weight_req := LightWeightRequest,
        Handler =  maps:get(handler, ApiSpec),
        Func =  maps:get(func, ApiSpec),
        {ok, Request, Envs#{handler => Handler,
-                                func => Func}}
+                                func => Func,
+                                light_weight_req => LightWeightRequest}}
     catch
         _:Error:Stacktrace ->
         logger:error("Error: ~p, Stacktrace: ~p", [Error, Stacktrace]),
         minirest_error:invalid_params(Request, Error)
     end.
 
-next_handler(Request, Envs) ->
+next_handler(Request, #{handler := Handler,
+                         func := Func,
+                         light_weight_req := LightWeightRequest}) ->
+    ct:print("next_handler =====> :~p~n", [Request]),
     try
-        Handler = maps:get(handler, Envs),
-        Func = maps:get(func, Envs),
-        Result = erlang:apply(Handler, Func, [Request]),
+        Result = erlang:apply(Handler, Func, [LightWeightRequest]),
         {ok, minirest_req:reply(200, #{},
             #{data => minirest_utils:normalize_return_format(Result)}, Request),
         #{}}
