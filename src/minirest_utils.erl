@@ -11,7 +11,7 @@
          gen_map_key/3,
          gen_map_key/1,
          match_route/2,
-         combine_bindings/3,
+         combine_bindings/2,
          normalize_return_format/1]).
 %% --------------------------------------------------------------------
 %% Functions
@@ -66,13 +66,13 @@ match_route(RouteKey, ReqPath) ->
   Tk2 = string:tokens(ReqPath, "/"),
   {ok, Len} = match_route(0, Tk1, Tk2),
   (length(Tk1) == (Len)) and (length(Tk2) == (Len)).
-
 match_route(Acc, ["*" | L1], [_ | L2]) ->
   match_route(Acc + 1, L1, L2);
 match_route(Acc, [KK | L1], [KK | L2]) ->
   match_route(Acc + 1, L1, L2);
 match_route(Acc, _, _) -> {ok, Acc}.
 
+%%
 fetch_params(RouteKey, ReqPath) ->
   fetch_params([], string:tokens(RouteKey, "/"), string:tokens(ReqPath, "/")).
 fetch_params(Acc, ["*" | L1], [Value | L2]) ->
@@ -81,8 +81,7 @@ fetch_params(Acc, [KK | L1], [KK | L2]) ->
   fetch_params(Acc, L1, L2);
 fetch_params(Acc, _, _) -> {ok, Acc}.
 
-
-combine_bindings(Acc, [], []) -> maps:from_list(Acc);
-combine_bindings(Acc, [K | KL], [V | VL])
-  when length(KL) == length(VL) ->
-  combine_bindings(Acc ++ [{K, V}], KL, VL).
+%%
+combine_bindings(Ks, Vs) when length(Ks) == length(Vs)->
+  maps:from_list(lists:zip(Ks, Vs));
+combine_bindings(_, _) -> #{}.

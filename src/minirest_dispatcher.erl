@@ -45,7 +45,7 @@ path_filter(Request, Envs) ->
                     KeyName -> Acc ++ [KeyName]
                 end
             end, [], string:tokens(maps:get(path, ApiSpec), "/")),
-            Bindings = minirest_utils:combine_bindings([], ParamsKey, ParamsValue),
+            Bindings = minirest_utils:combine_bindings(ParamsKey, ParamsValue),
             {ok, Request, Envs#{api_spec => ApiSpec, bindings => Bindings}};
         false -> minirest_error:not_found(Request, Path)
     end.

@@ -89,7 +89,7 @@
             }
 ).
 %% test path bindings
--http_api(#{path => "/bindings/$k1/$k2?k=v",
+-http_api(#{path => "/bindings/$k1/$k2",
             func => bindings,
             method => 'GET',
             description => "bindings",
