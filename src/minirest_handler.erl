@@ -169,7 +169,7 @@ reply(Code, Text, Req) ->
 
 %% JSON
 json_encode(D) ->
-    to_binary(jiffy:encode(D, [force_utf8])).
+    to_binary(jiffy:encode(to_ejson(to_list(D)), [force_utf8])).
 
 to_binary(B) when is_binary(B) -> B;
 to_binary(L) when is_list(L) ->
@@ -186,3 +186,18 @@ from_ejson({[]}) ->
 from_ejson({L}) ->
     [{Name, from_ejson(Value)} || {Name, Value} <- L];
 from_ejson(T) -> T.
+
+to_ejson([{}]) ->
+    {[]};
+to_ejson([{_, _}|_] = L) ->
+    {[{K, to_ejson(V)} || {K, V} <- L ]};
+to_ejson(L) when is_list(L) ->
+    [to_ejson(E) || E <- L];
+to_ejson(T) -> T.
+
+to_list(Map) when is_map(Map) ->
+    [{K, to_list(V)} || {K, V} <- maps:to_list(Map)];
+to_list(List) when is_list(List) ->
+    [to_list(L) || L <- List];
+to_list(Term) ->
+    Term.
