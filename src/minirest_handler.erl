@@ -169,7 +169,7 @@ reply(Code, Text, Req) ->
 
 %% JSON
 json_encode(D) ->
-    to_binary(jiffy:encode(to_ejson(to_list(D)), [force_utf8])).
+    to_binary(jiffy:encode(to_map(D), [force_utf8])).
 
 to_binary(B) when is_binary(B) -> B;
 to_binary(L) when is_list(L) ->
@@ -187,17 +187,41 @@ from_ejson({L}) ->
     [{Name, from_ejson(Value)} || {Name, Value} <- L];
 from_ejson(T) -> T.
 
-to_ejson([{}]) ->
-    {[]};
-to_ejson([{_, _}|_] = L) ->
-    {[{K, to_ejson(V)} || {K, V} <- L ]};
-to_ejson(L) when is_list(L) ->
-    [to_ejson(E) || E <- L];
-to_ejson(T) -> T.
+%% [{a, b}]           => #{a => b}
+%% [[{a,b}], [{c,d}]] => [#{a => b}, #{c => d}]
+%%
+%% [{a, #{b => c}}]   => #{a => #{b => c}}
+%% #{a => [{b, c}]}   => #{a => #{b => c}}
+%% #{a => [{}]}       => #{a => #{}}
 
-to_list(Map) when is_map(Map) ->
-    [{K, to_list(V)} || {K, V} <- maps:to_list(Map)];
-to_list(List) when is_list(List) ->
-    [to_list(L) || L <- List];
-to_list(Term) ->
-    Term.
+to_map([{}]) ->
+    #{};
+to_map([[{_,_}|_]|_] = L) ->
+    [to_map(E) || E <- L];
+to_map([{_, _}|_] = L) ->
+    lists:foldl(
+      fun({Name, Value}, Acc) ->
+        Acc#{Name => to_map(Value)}
+      end, #{}, L);
+to_map([M|_] = L) when is_map(M) ->
+    [to_map(E) || E <- L];
+to_map(M) when is_map(M) ->
+    maps:map(fun(_, V) -> to_map(V) end, M);
+to_map(T) -> T.
+
+%%====================================================================
+%% EUnits
+%%====================================================================
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+to_map_test() ->
+    #{a := b} = to_map([{a, b}]),
+    [#{a := b, c := d}, #{e := f}] = to_map([[{a, b}, {c, d}], [{e, f}]]),
+    #{a := #{b := c}} = to_map([{a, #{b => c}}]),
+    #{a := #{b := c}} = to_map(#{a => [{b, c}]}),
+    #{a := #{}} = to_map(#{a => [{}]}).
+
+-endif.

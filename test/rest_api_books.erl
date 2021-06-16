@@ -59,5 +59,5 @@ put(#{id := Id}, Params) ->
             {error, Id}
     end.
 
-delete(#{id := Id}, _Params) ->
+delete(#{id := _Id}, _Params) ->
     {error, "error_api"}.
