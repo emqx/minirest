@@ -5,10 +5,14 @@ on: [push, pull_request]
 jobs:    
     run_test_cases:
         runs-on: ubuntu-latest
-      
+
+        strategy:
+            matrix:
+                otp: [22.1, 23.3, 24.0.2]
+
         container:
-            image: erlang:22.1
-            
+            image: erlang:${{ matrix.otp }}
+
         steps:
             - uses: actions/checkout@v1
             - name: run test cases
