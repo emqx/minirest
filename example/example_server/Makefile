@@ -17,13 +17,9 @@ distclean:
 xref:
 	$(REBAR) xref
 
-.PHONY: eunit
-eunit: compile
-	$(REBAR) eunit verbose=true
-
 .PHONY: ct
 ct: compile
-	$(REBAR) as test ct -v
+	$(REBAR) ct -v
 
 cover:
 	$(REBAR) cover
