@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2013-2021 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,16 +12,22 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(minirest_example_sup).
 
--behaviour(supervisor).
+-module(example_server_app).
 
--export([start_link/0]).
+-behaviour(application).
 
--export([init/1]).
+-export([start/2, stop/1]).
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+start(_StartType, _StartArgs) ->
+    application:ensure_all_started(minirest),
+    Modules = [ example_hello_api, example_echo_api, example_pets_api],
+    Options = #{port => 8088, root_path => "/v1", modules => Modules},
+    minirest:start(?MODULE, Options),
+    example_server_sup:start_link().
 
-init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+stop(_State) ->
+    minirest:stop(?MODULE),
+    ok.
+
+%% internal functions
