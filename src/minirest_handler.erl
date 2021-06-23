@@ -39,7 +39,7 @@ handle(Request, State) ->
     Method = cowboy_req:method(Request),
     case maps:get(Method, State, undefined) of
         undefined ->
-            {?METHOD_NOT_ALLOWED};
+            {?RESPONSE_CODE_METHOD_NOT_ALLOWED};
         Callback ->
            apply_callback(Request, Callback)
     end.
@@ -53,7 +53,7 @@ apply_callback(Request,
             catch E:R:S ->
                 Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
                 Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
-                {?INTERNAL_SERVER_ERROR, Body}
+                {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
             end;
         Response ->
             {Response, Callback}
