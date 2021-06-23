@@ -9,8 +9,3 @@ start(_StartType, _StartArgs) ->
 
 stop(_State) ->
     ok.
-
-%% internal functions
-%% application:ensure_all_started(minirest).
-% minirest:start(abc, #{modules => [example_api], port => 8088, root_path=>"/v5"}).
-

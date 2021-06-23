@@ -9,7 +9,6 @@
 -record(callback, {
     module :: atom(),
     function :: atom(),
-    state :: term(),
     filter :: fun()
 }).
 
@@ -22,39 +21,38 @@ init(Request0, State)->
 
 %%%==============================================================================================
 %% internal
-handle(Request, State) ->
+handle(Request, State = #{api_state := APIState}) ->
     Method = cowboy_req:method(Request),
     case maps:get(Method, State, undefined) of
         undefined ->
             {{?METHOD_NOT_ALLOWED}, State};
         Callback ->
-           {Response, NCallback} =  apply_callback(Request, Callback),
-           {Response, maps:put(Method, NCallback, State)}
+           {Response, NextAPIState} =  apply_callback(Request, Callback, APIState),
+           {Response, State#{api_state => NextAPIState}}
     end.
 
-apply_callback(Request, 
-    Callback = #callback{filter = Filter, module = Mod, function = Fun, state = CBState}) ->
+apply_callback(Request,
+    Callback = #callback{filter = Filter, module = Mod, function = Fun}, APIState) ->
     case Filter(Request) of
         {ok, Parameters} ->
             try 
-                Result = erlang:apply(Mod, Fun, [Parameters, CBState]),
-                {Response, NCBState} = get_callback_response(Result),
-                {Response, Callback#callback{state = NCBState}}
+                Result = erlang:apply(Mod, Fun, [Parameters, APIState]),
+                get_callback_response(Result)
             catch E:R:S ->
                 Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
                 Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
-                {{?INTERNAL_SERVER_ERROR, Body}, Callback}
+                {{?INTERNAL_SERVER_ERROR, Body}, APIState}
             end;
         Response ->
             {Response, Callback}
     end.
 
-get_callback_response({StatusCode, Headers, Body, NCBState}) ->
-    {{StatusCode, Headers, Body}, NCBState};
-get_callback_response({StatusCode, Body, NCBState}) ->
-    {{StatusCode, Body}, NCBState};
-get_callback_response({StatusCode, NCBState}) ->
-    {{StatusCode}, NCBState}.
+get_callback_response({StatusCode, Headers, Body, APIState}) ->
+    {{StatusCode, Headers, Body}, APIState};
+get_callback_response({StatusCode, Body, APIState}) ->
+    {{StatusCode, Body}, APIState};
+get_callback_response({StatusCode, APIState}) ->
+    {{StatusCode}, APIState}.
 
 reply({StatusCode0}, Req) ->
     StatusCode = status_code(StatusCode0),
@@ -77,20 +75,19 @@ to_json(Data) when is_map(Data) ->
 
 %%==============================================================================================
 %% start handler
-init_state(CBModule, Metadata, CBState) ->
+init_state(Module, Metadata, State) ->
     Fun =
         fun(Method0, Options, HandlerState) ->
             Method = trans_method(Method0),
             Function = maps:get(operationId, Options),
             Filter = trans_filter(Method, Options),
             Callback = #callback{
-                module = CBModule,
+                module = Module,
                 function = Function,
-                state = CBState,
                 filter = Filter},
             maps:put(Method, Callback, HandlerState)
         end,
-    maps:fold(Fun, #{}, Metadata).
+    maps:put(api_state, State, maps:fold(Fun, #{}, Metadata)).
 
 status_code(ok) -> <<"200">>;
 status_code(Data) when is_integer(Data) -> integer_to_binary(Data);
