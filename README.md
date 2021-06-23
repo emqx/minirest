@@ -2,7 +2,7 @@
 
 A mini RESTful API framework built on cowboy and swagger
 
-## Write a api provider module
+## Write an API provider module
 
 ```erlang
 -module(example).
@@ -34,7 +34,7 @@ hello(_Request) ->
 
 ```
 
-## Start your http server
+## Start your HTTP server
 
 ```erlang
     application:ensure_all_started(minirest).
