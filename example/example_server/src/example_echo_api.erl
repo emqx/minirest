@@ -14,12 +14,12 @@
 
 -module(example_echo_api).
 
--export([api_spec/0]).
+-export([rest_api/0]).
 
 -export([echo/1]).
 
--spec(api_spec() -> [{Path :: string(), Metadata :: map()}]).
-api_spec() ->
+-spec(rest_api() -> [{Path :: string(), Metadata :: map()}]).
+rest_api() ->
     Path = "/echo/:message",
     Metadata = #{
         get =>

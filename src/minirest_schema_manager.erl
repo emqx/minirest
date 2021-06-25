@@ -1,6 +1,6 @@
 -module(minirest_schema_manager).
 
--define(SCHEMAS_FUNCTION, schema_spec).
+-define(SCHEMAS_FUNCTION, rest_schema).
 
 -export([new/1]).
 
