@@ -59,6 +59,10 @@ apply_callback(Request,
             {Response, Callback}
     end.
 
+reply(ok, Req) ->
+    StatusCode  = <<"200">>,
+    cowboy_req:reply(StatusCode, Req);
+
 reply({StatusCode0}, Req) ->
     StatusCode = status_code(StatusCode0),
     cowboy_req:reply(StatusCode, Req);
