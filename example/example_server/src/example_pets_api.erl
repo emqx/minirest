@@ -14,22 +14,39 @@
 
 -module(example_pets_api).
 
--export([api_spec/0]).
+-export([ rest_api/0
+        , rest_schema/0]).
 
 -export([ new/1
         , list/1
         , new_master/1
         , get_pet/1
-        , remove/1
-    ]).
+        , remove/1]).
 
--spec(api_spec() -> [{Path :: string(), Metadata :: map()}]).
-api_spec() ->
-    %% add schema before use ref
-    add_schema(),
-    [pets_api_spec(), pets_name_api_spec()].
+-spec(rest_api() -> [{Path :: string(), Metadata :: map()}]).
+rest_api() ->
+    [pets_api(), pets_name_api()].
 
-pets_api_spec() ->
+rest_schema() ->
+    DefinitionName = <<"pet">>,
+    DefinitionProperties = #{
+    <<"name">> =>
+        #{type => <<"string">>
+        , description => <<"Pet name">>
+        , example => <<"Calorie, LiBai and BaiYe">>},
+    <<"animal">> =>
+        #{type => <<"string">>
+        , enum => [<<"dog">>, <<"cat">>]
+        , default => <<"cat">>
+        , description => <<"Pet type">>},
+    <<"master">> =>
+        #{type => <<"string">>
+        , description => <<"Master name">>
+        , example => <<"Shawn">>}
+    },
+    [{DefinitionName, DefinitionProperties}].
+
+pets_api() ->
     Path = "/pets",
     Metadata = #{
         post =>
@@ -72,7 +89,7 @@ pets_api_spec() ->
                     , <<"404">> => #{description => "pet name not found"}}}},
     {Path, Metadata}.
 
-pets_name_api_spec() ->
+pets_name_api() ->
     Path = "/pets/:pet_name",
     Metadata = #{
         get =>
@@ -159,21 +176,3 @@ remove(Request) ->
 
 %%==============================================================================================
 %% internal
-add_schema() ->
-    DefinitionName = <<"pet">>,
-    DefinitionProperties = #{
-    <<"name">> =>
-        #{type => <<"string">>
-        , description => <<"Pet name">>
-        , example => <<"Tom">>},
-    <<"animal">> =>
-        #{type => <<"string">>
-        , enum => [<<"dog">>, <<"cat">>]
-        , default => <<"cat">>
-        , description => <<"Pet type">>},
-    <<"master">> =>
-        #{type => <<"string">>
-        , description => <<"Master name">>
-        , example => <<"Shawn">>}
-    },
-    cowboy_swagger:add_definition(DefinitionName, DefinitionProperties).

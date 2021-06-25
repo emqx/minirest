@@ -22,6 +22,7 @@ start(Name, Options) ->
     RootPath = maps:get(root_path, Options, ""),
     Trails = minirest_trails:get_trails(Modules, RootPath) ++ trails:trails([cowboy_swagger_handler]),
     trails:store(Trails),
+    ok = minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),
     RanchOptions  = [{port, maps:get(port, Options)}],
     CowboyOptions = #{ env      => #{dispatch => Dispatch}

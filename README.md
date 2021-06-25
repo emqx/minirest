@@ -7,12 +7,12 @@ A mini RESTful API framework built on cowboy and swagger
 ```erlang
 -module(example).
 
--export([api_spec/0]).
+-export([rest_api/0]).
 
 -export([hello/1]).
 
--spec(api_spec() -> [{Path :: string(), Metadata :: map()}]).
-api_spec() ->
+-spec(rest_api() -> [{Path :: string(), Metadata :: map()}]).
+rest_api() ->
     Path = "/hello",
     Metadata = #{
         get =>

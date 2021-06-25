@@ -14,7 +14,7 @@
 
 -module(minirest_trails).
 
--define(API_SPEC, api_spec).
+-define(API_SPEC, rest_api).
 
 -export([get_trails/2]).
 
