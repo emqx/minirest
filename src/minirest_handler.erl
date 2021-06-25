@@ -16,14 +16,15 @@
 
 -export([init/2]).
 
--export([init_state/2]).
+-export([init_state/3]).
 
 -include("minirest_http.hrl").
 
 -record(callback, {
     module :: atom(),
     function :: atom(),
-    filter :: fun()
+    filter :: fun(),
+    global_filter :: fun()
 }).
 
 %%==============================================================================================
@@ -41,22 +42,32 @@ handle(Request, State) ->
         undefined ->
             {?RESPONSE_CODE_METHOD_NOT_ALLOWED};
         Callback ->
-           apply_callback(Request, Callback)
+            do_filter(Request, Callback)
     end.
 
-apply_callback(Request,
-    Callback = #callback{filter = Filter, module = Mod, function = Fun}) ->
-    case Filter(Request) of
-        {ok, Parameters} ->
-            try 
-                erlang:apply(Mod, Fun, [Parameters])
-            catch E:R:S ->
-                Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
-                Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
-                {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
-            end;
+do_filter(Request, Callback = #callback{global_filter = GlobalFilter}) when is_function(GlobalFilter) ->
+    case GlobalFilter(Request) of
+        ok ->
+            do_filter(Request, Callback#callback{global_filter = pass});
         Response ->
             {Response, Callback}
+    end;
+
+do_filter(Request, Callback = #callback{filter = Filter}) ->
+    case Filter(Request) of
+        {ok, Parameters} ->
+            apply_callback(Parameters, Callback);
+        Response ->
+            {Response, Callback}
+    end.
+
+apply_callback(Parameters, #callback{module = Mod, function = Fun}) ->
+    try
+        erlang:apply(Mod, Fun, [Parameters])
+    catch E:R:S ->
+        Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
+        Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
+        {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
 reply(ok, Req) ->
@@ -84,7 +95,7 @@ to_json(Data) when is_map(Data) ->
 
 %%==============================================================================================
 %% start handler
-init_state(Module, Metadata) ->
+init_state(Module, Metadata, GlobalFilter) ->
     Fun =
         fun(Method0, Options, HandlerState) ->
             Method = trans_method(Method0),
@@ -93,6 +104,7 @@ init_state(Module, Metadata) ->
             Callback = #callback{
                 module = Module,
                 function = Function,
+                global_filter = GlobalFilter,
                 filter = Filter},
             maps:put(Method, Callback, HandlerState)
         end,
@@ -113,6 +125,7 @@ trans_method(options) -> <<"OPTION">>;
 trans_method(connect) -> <<"CONNECT">>;
 trans_method(trace)   -> <<"TRACE">>.
 
+%% TODO: filter by metadata
 trans_filter(<<"GET">>, _Options) ->
     fun(Request) -> {ok, Request} end;
 trans_filter(<<"POST">>, _Options) ->

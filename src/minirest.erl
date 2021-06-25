@@ -18,18 +18,22 @@
         , stop/1]).
 
 start(Name, Options) ->
-    Modules = maps:get(modules, Options, []),
-    RootPath = maps:get(root_path, Options, ""),
-    Trails = minirest_trails:get_trails(Modules, RootPath) ++ trails:trails([cowboy_swagger_handler]),
+    Modules       = maps:get(modules, Options, []),
+    RootPath      = maps:get(root_path, Options, ""),
+    RanchOptions  = maps:get(ranch, Options),
+    HttpsEnable   = maps:get(https, Options, false),
+    GlobalFilter  = maps:get(global_filter, Options, undefined),
+    Trails = minirest_trails:get_trails(Modules, RootPath, GlobalFilter) ++ trails:trails([cowboy_swagger_handler]),
     trails:store(Trails),
     ok = minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),
-    RanchOptions  = [{port, maps:get(port, Options)}],
-    CowboyOptions = #{ env      => #{dispatch => Dispatch}
-                     , compress => true
-                     , timeout  => 12000
-                     },
-    {ok, _} = cowboy:start_clear(Name, RanchOptions, CowboyOptions).
+    CowboyOptions = #{ env => #{dispatch => Dispatch}},
+    case HttpsEnable of
+        false ->
+          {ok, _} = cowboy:start_clear(Name, RanchOptions, CowboyOptions);
+        true ->
+          {ok, _} = cowboy:start_tls(Name, RanchOptions, CowboyOptions)
+    end.
 
 stop(Name) ->
     cowboy:stop_listener(Name).

@@ -22,7 +22,13 @@
 start(_StartType, _StartArgs) ->
     application:ensure_all_started(minirest),
     Modules = [example_hello_api, example_echo_api, example_pets_api],
-    Options = #{port => 8088, root_path => "/v1", modules => Modules},
+    RanchOptions  = [{port, 8088}],
+    GlobalFilter = fun(Request) -> io:format("global_filter: ~0p~n", [Request]) end,
+    Options =
+        #{ranch => RanchOptions
+            , root_path => "/v1"
+            , modules => Modules
+            , global_filter => GlobalFilter},
     minirest:start(?MODULE, Options),
     example_server_sup:start_link().
 
