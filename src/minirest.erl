@@ -18,12 +18,13 @@
         , stop/1]).
 
 start(Name, Options) ->
-    Modules       = maps:get(modules, Options, []),
-    RootPath      = maps:get(root_path, Options, ""),
-    RanchOptions  = maps:get(ranch, Options),
-    HttpsEnable   = maps:get(https, Options, false),
-    GlobalFilter  = maps:get(global_filter, Options, undefined),
-    Trails = minirest_trails:get_trails(Modules, RootPath, GlobalFilter) ++ trails:trails([cowboy_swagger_handler]),
+    Modules        = maps:get(modules, Options, []),
+    RootPath       = maps:get(root_path, Options, ""),
+    RanchOptions   = maps:get(ranch, Options),
+    HttpsEnable    = maps:get(https, Options, false),
+    GlobalFilter   = maps:get(global_filter, Options, undefined),
+    SwaggerSupport = maps:get(swagger_support, Options, true),
+    Trails = minirest_trails:get_trails(Modules, RootPath, GlobalFilter, SwaggerSupport),
     trails:store(Trails),
     ok = minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),

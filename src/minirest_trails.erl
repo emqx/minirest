@@ -16,9 +16,12 @@
 
 -define(API_SPEC, rest_api).
 
--export([get_trails/3]).
+-export([get_trails/4]).
 
-get_trails(Modules, RootPath, GlobalFilter) ->
+get_trails(Modules, RootPath, GlobalFilter, true) ->
+    get_trails(Modules, RootPath, GlobalFilter, false) ++ trails:trails([cowboy_swagger_handler]);
+
+get_trails(Modules, RootPath, GlobalFilter, false) ->
     Fun = fun(Module, CurrentTrails) -> CurrentTrails ++ module_trails(Module, RootPath, GlobalFilter) end,
     lists:foldl(Fun, [], Modules).
 

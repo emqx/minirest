@@ -50,7 +50,7 @@ do_filter(Request, Callback = #callback{global_filter = GlobalFilter}) when is_f
         ok ->
             do_filter(Request, Callback#callback{global_filter = pass});
         Response ->
-            {Response, Callback}
+            Response
     end;
 
 do_filter(Request, Callback = #callback{filter = Filter}) ->
@@ -58,7 +58,7 @@ do_filter(Request, Callback = #callback{filter = Filter}) ->
         {ok, Parameters} ->
             apply_callback(Parameters, Callback);
         Response ->
-            {Response, Callback}
+            Response
     end.
 
 apply_callback(Parameters, #callback{module = Mod, function = Fun}) ->
