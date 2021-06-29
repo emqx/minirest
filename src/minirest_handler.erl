@@ -16,14 +16,19 @@
 
 -export([init/2]).
 
--export([init_state/2]).
+-export([init_state/5]).
 
 -include("minirest_http.hrl").
 
+-define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
+
+
 -record(callback, {
-    module :: atom(),
-    function :: atom(),
-    filter :: fun()
+    path            :: string(),
+    module          :: atom(),
+    function        :: atom(),
+    filter          :: fun(),
+    authorization   :: {Module :: atom(), Function :: atom()} | undefined
 }).
 
 %%==============================================================================================
@@ -41,22 +46,36 @@ handle(Request, State) ->
         undefined ->
             {?RESPONSE_CODE_METHOD_NOT_ALLOWED};
         Callback ->
-           apply_callback(Request, Callback)
+            do_auth(Request, Callback)
     end.
 
-apply_callback(Request,
-    Callback = #callback{filter = Filter, module = Mod, function = Fun}) ->
+do_auth(Request, Callback = #callback{authorization = {M, F}}) ->
+    case erlang:apply(M, F, [Request]) of
+        ok ->
+            do_filter(Request, Callback);
+        _ ->
+            {?RESPONSE_CODE_UNAUTHORIZED}
+    end;
+
+do_auth(Request, Callback) ->
+    do_filter(Request, Callback).
+
+do_filter(Request, Callback = #callback{filter = Filter}) ->
     case Filter(Request) of
         {ok, Parameters} ->
-            try 
-                erlang:apply(Mod, Fun, [Parameters])
-            catch E:R:S ->
-                Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
-                Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
-                {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
-            end;
+            apply_callback(Parameters, Callback);
         Response ->
-            {Response, Callback}
+            Response
+    end.
+
+apply_callback(Parameters, #callback{module = Mod, function = Fun, path = Path}) ->
+    try
+        erlang:apply(Mod, Fun, [Parameters])
+    catch E:R:S ->
+        ?LOG(debug, "path:~p, ~p: ~p: ~p", [Path, E, R, S]),
+        Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
+        Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
+        {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
 reply({StatusCode0}, Req) ->
@@ -71,7 +90,12 @@ reply({StatusCode0, Body0}, Req) ->
 reply({StatusCode0, Headers, Body0}, Req) ->
     StatusCode = status_code(StatusCode0),
     Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, Headers, Body, Req).
+    cowboy_req:reply(StatusCode, Headers, Body, Req);
+
+reply(BadReturn, Req) ->
+    StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
+    Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
+    cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
 
 to_json(Data) when is_binary(Data) ->
     Data;
@@ -80,15 +104,17 @@ to_json(Data) when is_map(Data) ->
 
 %%==============================================================================================
 %% start handler
-init_state(Module, Metadata) ->
+init_state(RootPath, Path, Module, Metadata, Authorization) ->
     Fun =
         fun(Method0, Options, HandlerState) ->
             Method = trans_method(Method0),
             Function = maps:get(operationId, Options),
             Filter = trans_filter(Method, Options),
             Callback = #callback{
+                path = lists:append(RootPath, Path),
                 module = Module,
                 function = Function,
+                authorization = Authorization,
                 filter = Filter},
             maps:put(Method, Callback, HandlerState)
         end,
@@ -109,6 +135,7 @@ trans_method(options) -> <<"OPTION">>;
 trans_method(connect) -> <<"CONNECT">>;
 trans_method(trace)   -> <<"TRACE">>.
 
+%% TODO: filter by metadata
 trans_filter(<<"GET">>, _Options) ->
     fun(Request) -> {ok, Request} end;
 trans_filter(<<"POST">>, _Options) ->

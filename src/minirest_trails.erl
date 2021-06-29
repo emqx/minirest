@@ -16,24 +16,27 @@
 
 -define(API_SPEC, rest_api).
 
--export([get_trails/2]).
+-export([get_trails/4]).
 
-get_trails(Modules, RootPath) ->
-    Fun = fun(Module, CurrentTrails) -> CurrentTrails ++ module_trails(Module, RootPath) end,
+get_trails(Modules, RootPath, Authorization, true) ->
+    get_trails(Modules, RootPath, Authorization, false) ++ trails:trails([cowboy_swagger_handler]);
+
+get_trails(Modules, RootPath, Authorization, false) ->
+    Fun = fun(Module, CurrentTrails) -> CurrentTrails ++ module_trails(Module, RootPath, Authorization) end,
     lists:foldl(Fun, [], Modules).
 
-module_trails(Module, RootPath) ->
+module_trails(Module, RootPath, Authorization) ->
     try
         OpenApis = erlang:apply(Module, ?API_SPEC, []),
         Fun =
             fun({Path, Metadata}, Trails) ->
-                Trails ++ handler_trails(Module, Path, Metadata, RootPath)
+                Trails ++ handler_trails(Module, RootPath, Path, Metadata, Authorization)
             end,
         lists:foldl(Fun, [], OpenApis)
     catch E:R:S ->
         io:format("Callback Module ~p, ~p ~p ~p", [Module, E, R, S])
     end.
 
-handler_trails(Module, Path, Metadata, RootPath) ->
-    HandlerState = minirest_handler:init_state(Module, Metadata),
-    [trails:trail(RootPath ++ Path, minirest_handler, HandlerState, Metadata)].
+handler_trails(Module, RootPath, Path, Metadata, Authorization) ->
+    HandlerState = minirest_handler:init_state(RootPath, Path, Module, Metadata, Authorization),
+    [trails:trail(lists:append(RootPath, Path), minirest_handler, HandlerState, Metadata)].
