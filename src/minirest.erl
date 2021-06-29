@@ -30,7 +30,7 @@ start(Name, Options) ->
     SwaggerSupport andalso trails:store(Trails),
     SwaggerSupport andalso minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),
-    CowboyOptions = #{ env => #{dispatch => Dispatch}},
+    CowboyOptions = #{env => #{dispatch => Dispatch}},
     TransOpts = maps:to_list(maps:without([modules, root_path, https, authorization, swagger_support], Options)),
     StartFunction =
         case HttpsEnable of
