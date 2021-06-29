@@ -86,7 +86,12 @@ reply({StatusCode0, Body0}, Req) ->
 reply({StatusCode0, Headers, Body0}, Req) ->
     StatusCode = status_code(StatusCode0),
     Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, Headers, Body, Req).
+    cowboy_req:reply(StatusCode, Headers, Body, Req);
+
+reply(BadReturn, Req) ->
+    StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
+    Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
+    cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
 
 to_json(Data) when is_binary(Data) ->
     Data;
