@@ -25,8 +25,8 @@ start(Name, Options) ->
     GlobalFilter   = maps:get(global_filter, Options, undefined),
     SwaggerSupport = maps:get(swagger_support, Options, true),
     Trails = minirest_trails:get_trails(Modules, RootPath, GlobalFilter, SwaggerSupport),
-    trails:store(Trails),
-    ok = minirest_schema_manager:new(Modules),
+    SwaggerSupport andalso trails:store(Trails),
+    SwaggerSupport andalso minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),
     CowboyOptions = #{ env => #{dispatch => Dispatch}},
     case HttpsEnable of

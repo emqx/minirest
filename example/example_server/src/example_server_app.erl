@@ -26,9 +26,9 @@ start(_StartType, _StartArgs) ->
     GlobalFilter = fun(Request) -> io:format("global_filter: ~0p~n", [Request]) end,
     Options =
         #{ranch => RanchOptions
-            , root_path => "/v1"
-            , modules => Modules
-            , global_filter => GlobalFilter},
+        , root_path => "/minirest"
+        , modules => Modules
+        , global_filter => GlobalFilter},
     minirest:start(?MODULE, Options),
     example_server_sup:start_link().
 
