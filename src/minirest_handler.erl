@@ -16,15 +16,19 @@
 
 -export([init/2]).
 
--export([init_state/3]).
+-export([init_state/5]).
 
 -include("minirest_http.hrl").
 
+-define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
+
+
 -record(callback, {
-    module :: atom(),
-    function :: atom(),
-    filter :: fun(),
-    global_filter :: fun()
+    path            :: string(),
+    module          :: atom(),
+    function        :: atom(),
+    filter          :: fun(),
+    authorization   :: {Module :: atom(), Function :: atom()} | undefined
 }).
 
 %%==============================================================================================
@@ -42,16 +46,19 @@ handle(Request, State) ->
         undefined ->
             {?RESPONSE_CODE_METHOD_NOT_ALLOWED};
         Callback ->
-            do_filter(Request, Callback)
+            do_auth(Request, Callback)
     end.
 
-do_filter(Request, Callback = #callback{global_filter = GlobalFilter}) when is_function(GlobalFilter) ->
-    case GlobalFilter(Request) of
+do_auth(Request, Callback = #callback{authorization = {M, F}}) ->
+    case erlang:apply(M, F, [Request]) of
         ok ->
-            do_filter(Request, Callback#callback{global_filter = pass});
-        Response ->
-            Response
+            do_filter(Request, Callback);
+        _ ->
+            {?RESPONSE_CODE_UNAUTHORIZED}
     end;
+
+do_auth(Request, Callback) ->
+    do_filter(Request, Callback).
 
 do_filter(Request, Callback = #callback{filter = Filter}) ->
     case Filter(Request) of
@@ -61,18 +68,15 @@ do_filter(Request, Callback = #callback{filter = Filter}) ->
             Response
     end.
 
-apply_callback(Parameters, #callback{module = Mod, function = Fun}) ->
+apply_callback(Parameters, #callback{module = Mod, function = Fun, path = Path}) ->
     try
         erlang:apply(Mod, Fun, [Parameters])
     catch E:R:S ->
+        ?LOG(debug, "path:~p, ~p: ~p: ~p", [Path, E, R, S]),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
         Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
-
-reply(ok, Req) ->
-    StatusCode  = <<"200">>,
-    cowboy_req:reply(StatusCode, Req);
 
 reply({StatusCode0}, Req) ->
     StatusCode = status_code(StatusCode0),
@@ -100,16 +104,17 @@ to_json(Data) when is_map(Data) ->
 
 %%==============================================================================================
 %% start handler
-init_state(Module, Metadata, GlobalFilter) ->
+init_state(RootPath, Path, Module, Metadata, Authorization) ->
     Fun =
         fun(Method0, Options, HandlerState) ->
             Method = trans_method(Method0),
             Function = maps:get(operationId, Options),
             Filter = trans_filter(Method, Options),
             Callback = #callback{
+                path = lists:append(RootPath, Path),
                 module = Module,
                 function = Function,
-                global_filter = GlobalFilter,
+                authorization = Authorization,
                 filter = Filter},
             maps:put(Method, Callback, HandlerState)
         end,

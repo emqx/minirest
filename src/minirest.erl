@@ -14,26 +14,41 @@
 
 -module(minirest).
 
+-define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
+
 -export([ start/2
         , stop/1]).
 
 start(Name, Options) ->
     Modules        = maps:get(modules, Options, []),
     RootPath       = maps:get(root_path, Options, ""),
-    RanchOptions   = maps:get(ranch, Options),
     HttpsEnable    = maps:get(https, Options, false),
-    GlobalFilter   = maps:get(global_filter, Options, undefined),
+    Authorization  = maps:get(authorization, Options, undefined),
     SwaggerSupport = maps:get(swagger_support, Options, true),
-    Trails = minirest_trails:get_trails(Modules, RootPath, GlobalFilter, SwaggerSupport),
+    Port           = maps:get(port, Options),
+    Trails = minirest_trails:get_trails(Modules, RootPath, Authorization, SwaggerSupport),
     SwaggerSupport andalso trails:store(Trails),
     SwaggerSupport andalso minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),
     CowboyOptions = #{ env => #{dispatch => Dispatch}},
-    case HttpsEnable of
-        false ->
-          {ok, _} = cowboy:start_clear(Name, RanchOptions, CowboyOptions);
-        true ->
-          {ok, _} = cowboy:start_tls(Name, RanchOptions, CowboyOptions)
+    TransOpts = maps:to_list(maps:without([modules, root_path, https, authorization, swagger_support], Options)),
+    StartFunction =
+        case HttpsEnable of
+            false ->
+                start_clear;
+            _ ->
+                start_tls
+        end,
+    case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
+        {ok, Pid} ->
+            ?LOG(info, "Start ~s listener on ~p unsuccessfully: ~0p", [Name, Port, Pid]),
+            {ok, Pid};
+        {error, eaddrinuse} ->
+            ?LOG(error, "Start ~s listener on ~p failed: ~0p", [Name, Port, eaddrinuse]),
+            error(eaddrinuse);
+        {error, Any} ->
+            ?LOG(error, "Start ~s listener on ~p failed: ~0p", [Name, Port, Any]),
+            error(Any)
     end.
 
 stop(Name) ->

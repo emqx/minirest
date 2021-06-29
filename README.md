@@ -38,7 +38,7 @@ hello(_Request) ->
 
 ```erlang
     application:ensure_all_started(minirest).
-    Options = #{reanch => [{port 8088}], modules => [example_hello_api]}.
+    Options = #{port => 8088, modules => [example_hello_api]}.
     minirest:start(?MODULE, Options).
 ```
 
