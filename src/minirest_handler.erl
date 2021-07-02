@@ -16,7 +16,9 @@
 
 -export([init/2]).
 
--export([init_state/5]).
+-export([init_state/4]).
+
+-export([reply/2]).
 
 -include("minirest_http.hrl").
 
@@ -44,7 +46,7 @@ handle(Request, State) ->
     Method = cowboy_req:method(Request),
     case maps:get(Method, State, undefined) of
         undefined ->
-            {?RESPONSE_CODE_METHOD_NOT_ALLOWED};
+            {?RESPONSE_CODE_METHOD_NOT_ALLOWED, #{<<"allow">> => [maps:keys(State)]}, <<"">>};
         Callback ->
             do_auth(Request, Callback)
     end.
@@ -104,14 +106,14 @@ to_json(Data) when is_map(Data) ->
 
 %%==============================================================================================
 %% start handler
-init_state(RootPath, Path, Module, Metadata, Authorization) ->
+init_state(Path, Module, Metadata, Authorization) ->
     Fun =
         fun(Method0, Options, HandlerState) ->
             Method = trans_method(Method0),
             Function = maps:get(operationId, Options),
             Filter = trans_filter(Method, Options),
             Callback = #callback{
-                path = lists:append(RootPath, Path),
+                path = Path,
                 module = Module,
                 function = Function,
                 authorization = Authorization,
@@ -120,10 +122,8 @@ init_state(RootPath, Path, Module, Metadata, Authorization) ->
         end,
     maps:fold(Fun, #{}, Metadata).
 
-status_code(ok) -> <<"200">>;
-status_code(Data) when is_integer(Data) -> integer_to_binary(Data);
-status_code(Data) when is_list(Data) -> list_to_binary(Data);
-status_code(Data) when is_binary(Data) -> Data.
+status_code(ok) -> 200;
+status_code(Code) -> Code.
 
 trans_method(get)     -> <<"GET">>;
 trans_method(post)    -> <<"POST">>;
