@@ -21,17 +21,25 @@
 
 start(Name, Options) ->
     Modules        = maps:get(modules, Options, []),
-    RootPath       = maps:get(root_path, Options, ""),
+    BasePath       = maps:get(base_path, Options, undefined),
     HttpsEnable    = maps:get(https, Options, false),
     Authorization  = maps:get(authorization, Options, undefined),
     SwaggerSupport = maps:get(swagger_support, Options, true),
     Port           = maps:get(port, Options),
-    Trails = minirest_trails:get_trails(Modules, RootPath, Authorization, SwaggerSupport),
+    Trails = minirest_trails:get_trails(Modules, BasePath, Authorization, SwaggerSupport),
     SwaggerSupport andalso trails:store(Trails),
     SwaggerSupport andalso minirest_schema_manager:new(Modules),
+    SwaggerSupport andalso set_swagger_global_spec(Options),
     Dispatch = trails:single_host_compile(Trails),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
-    TransOpts = maps:to_list(maps:without([modules, root_path, https, authorization, swagger_support], Options)),
+    IgnoreKeys = [ modules
+                 , base_path
+                 , https
+                 , authorization
+                 , swagger_support
+                 , swagger_global_spec
+                 , apps],
+    TransOpts = maps:to_list(maps:without(IgnoreKeys, Options)),
     StartFunction =
         case HttpsEnable of
             false ->
@@ -53,3 +61,13 @@ start(Name, Options) ->
 
 stop(Name) ->
     cowboy:stop_listener(Name).
+
+%%%==============================================================================================
+%% internal
+set_swagger_global_spec(Options) ->
+    DefaultGlobalSpec = #{
+        swagger => "2.0",
+        info => #{title => "minirest example API", version => " "}
+    },
+    GlobalSpec = maps:get(swagger_global_spec, Options, DefaultGlobalSpec),
+    application:set_env(cowboy_swagger, global_spec, GlobalSpec).

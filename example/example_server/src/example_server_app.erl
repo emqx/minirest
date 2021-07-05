@@ -23,13 +23,23 @@
 
 start(_StartType, _StartArgs) ->
     application:ensure_all_started(minirest),
-    Modules = [example_hello_api, example_echo_api, example_pets_api],
+    BasePath = "/minirest_example",
+    GlobalSpec =
+        #{
+            swagger => "2.0",
+            info => #{title => "minirest example API", version => "v1"},
+            basePath => list_to_binary(BasePath)
+        },
     Authorization = {?MODULE, auth},
+    Modules = [example_echo_api, example_file_api, example_hello_api, example_pets_api],
     Options =
-        #{port => 8088
-        , root_path => "/minirest"
-        , modules => Modules
-        , authorization => Authorization},
+        #{
+            port => 8088,
+            base_path => BasePath,
+            modules => Modules,
+            authorization => Authorization,
+            swagger_global_spec => GlobalSpec
+        },
     minirest:start(?MODULE, Options),
     example_server_sup:start_link().
 

@@ -22,20 +22,23 @@
 rest_api() ->
     Path = "/echo/:message",
     Metadata = #{
-        get =>
-           #{tags => ["example"],
+        get => #{
+            tags => ["example"],
             description => "echo parameters",
             operationId => echo,
-            parameters => [#{ name => message
-                            , in => path
-                            , schema =>
-                               #{ type => string
-                                , example => "hello"}}],
-            responses => #{<<"200">> => #{
-                description => <<"echo message">>,
-                content => #{
-                  'text/plain' =>
-                    #{schema => #{type => string}}}}}}},
+            parameters => [#{
+                name => message,
+                in => path,
+                schema => #{
+                    type => string,
+                    example => "hello"}}],
+            responses => #{
+                <<"200">> => #{
+                    description => <<"echo message">>,
+                    content => #{
+                        'text/plain' => #{
+                            schema => #{
+                                type => string}}}}}}},
     [{Path, Metadata}].
 
 echo(Request) ->
