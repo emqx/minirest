@@ -30,14 +30,14 @@ module_trails(Module, BasePath, Authorization) ->
         OpenApis = erlang:apply(Module, ?API_SPEC, []),
         Fun =
             fun({Path, Metadata}, Trails) ->
-                Trails ++ handler_trails(Module, BasePath, Path, Metadata, Authorization)
+                Trails ++ handler_trails(BasePath, Path, Module, Metadata, Authorization)
             end,
         lists:foldl(Fun, [], OpenApis)
     catch E:R:S ->
         io:format("Callback Module ~p, ~p ~p ~p", [Module, E, R, S])
     end.
 
-handler_trails(Module, BasePath, Path, Metadata, Authorization) ->
+handler_trails(BasePath, Path, Module, Metadata, Authorization) ->
     HandlerState = minirest_handler:init_state(Path, Module, Metadata, Authorization),
     [trails:trail(append_base_path(BasePath, Path), minirest_handler, HandlerState, Metadata)].
 
