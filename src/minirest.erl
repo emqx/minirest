@@ -28,8 +28,8 @@ start(Name, Options) ->
     Port           = maps:get(port, Options),
     Trails = minirest_trails:get_trails(Modules, BasePath, Authorization, SwaggerSupport),
     SwaggerSupport andalso trails:store(Trails),
-    SwaggerSupport andalso minirest_schema_manager:new(Modules),
     SwaggerSupport andalso set_swagger_global_spec(Options),
+    SwaggerSupport andalso minirest_schema_manager:new(Modules),
     Dispatch = trails:single_host_compile(Trails),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
     IgnoreKeys = [ modules
