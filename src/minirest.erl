@@ -32,7 +32,13 @@ start(Name, Options) ->
     SwaggerSupport andalso set_swagger_global_spec(Options),
     Dispatch = trails:single_host_compile(Trails),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
-    IgnoreKeys = [modules, base_path, https, authorization, swagger_support, swagger_global_spec],
+    IgnoreKeys = [ modules
+                 , base_path
+                 , https
+                 , authorization
+                 , swagger_support
+                 , swagger_global_spec
+                 , apps],
     TransOpts = maps:to_list(maps:without(IgnoreKeys, Options)),
     StartFunction =
         case HttpsEnable of
@@ -56,6 +62,8 @@ start(Name, Options) ->
 stop(Name) ->
     cowboy:stop_listener(Name).
 
+%%%==============================================================================================
+%% internal
 set_swagger_global_spec(Options) ->
     DefaultGlobalSpec = #{
         swagger => "2.0",

@@ -12,30 +12,33 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(example_hello_api).
+-module(example_echo_api).
 
 -export([rest_api/0]).
 
--export([hello/1]).
+-export([echo/1]).
 
 -spec(rest_api() -> [{Path :: string(), Metadata :: map()}]).
 rest_api() ->
-    Path = "/hello",
+    Path = "/echo/:message",
     Metadata = #{
-        get => #{
-            tags => ["example"],
-            description => "hello world",
-            operationId => hello,
+        get =>
+           #{tags => ["example"],
+            description => "echo parameters",
+            operationId => echo,
+            parameters => [#{ name => message
+                            , in => path
+                            , schema =>
+                               #{ type => string
+                                , example => "hello"}}],
             responses => #{
                 <<"200">> => #{
-                    content => #{
-                        'text/plain' => #{
-                            schema => #{
-                                type => string}}}}}}},
+                    description => <<"echo message">>, content => #{'text/plain' =>
+                        #{schema => #{type => string}}}}}}},
     [{Path, Metadata}].
 
-hello(_Request) ->
+echo(Request) ->
     StatusCode = 200,
     Headers = #{<<"Content-Type">> => <<"text/plain">>},
-    Body = <<"hello world !">>,
+    Body = cowboy_req:binding(message, Request),
     {StatusCode, Headers, Body}.

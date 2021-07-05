@@ -22,29 +22,25 @@
 rest_api() ->
     Path = "/file",
     Metadata = #{
-        post => #{
-            tags => ["file"],
+        post =>
+            #{tags => ["file"],
             description => "file upload",
             operationId => up_file,
             consumes => [<<"multipart/form-data">>],
-            parameters => [#{
-                name => file,
-                in => formData,
-                type => file}],
-            responses => #{
-                <<"200">> => #{
-                    description => <<"Upload file success">>}}},
-        get => #{
-            tags => ["file"],
+            parameters => [
+                #{name => file
+                    , in => formData
+                    , type => file}],
+            responses => #{<<"200">> => #{
+                description => <<"Upload file success">>}}},
+        get =>
+            #{tags => ["file"],
             description => "file download",
             produces => [<<"multipart/form-data">>],
             operationId => down_file,
             responses =>
-                #{<<"200">> => #{
-                    content => #{
-                        'multipart/form-data' => #{
-                            schema => #{
-                                type => file}}}}}}},
+                #{<<"200">> => #{content => #{'multipart/form-data' =>
+                    #{schema => #{type => file}}}}}}},
     [{Path, Metadata}].
 
 up_file(Request) ->

@@ -30,8 +30,8 @@ start(_StartType, _StartArgs) ->
             info => #{title => "minirest example API", version => "v1"},
             basePath => list_to_binary(BasePath)
         },
-    Modules = [example_hello_api, example_echo_api, example_pets_api],
     Authorization = {?MODULE, auth},
+    Modules = [example_echo_api, example_file_api, example_hello_api, example_pets_api],
     Options =
         #{
             port => 8088,

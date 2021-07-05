@@ -22,16 +22,15 @@
 rest_api() ->
     Path = "/hello",
     Metadata = #{
-        get => #{
-            tags => ["example"],
+        get =>
+           #{tags => ["example"],
             description => "hello world",
             operationId => hello,
-            responses => #{
-                <<"200">> => #{
-                    content => #{
-                        'text/plain' => #{
-                            schema => #{
-                                type => string}}}}}}},
+            responses => 
+                #{<<"200">> => 
+                    #{content => 
+                    #{'text/plain' =>
+                        #{schema => #{type => string}}}}}}},
     [{Path, Metadata}].
 
 hello(_Request) ->

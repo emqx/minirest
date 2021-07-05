@@ -30,64 +30,63 @@ rest_api() ->
 rest_schema() ->
     DefinitionName = <<"pet">>,
     DefinitionProperties = #{
-    <<"name">> => #{
-        type => <<"string">>,
-        description => <<"Pet name">>,
-        example => <<"Calorie, LiBai and BaiYe">>},
-    <<"animal">> => #{
-        type => <<"string">>,
-        enum => [<<"dog">>, <<"cat">>],
-        default => <<"cat">>,
-        description => <<"Pet type">>},
-    <<"master">> => #{
-        type => <<"string">>,
-        description => <<"Master name">>,
-        example => <<"Shawn">>}},
+    <<"name">> =>
+        #{type => <<"string">>
+        , description => <<"Pet name">>
+        , example => <<"Calorie, LiBai and BaiYe">>},
+    <<"animal">> =>
+        #{type => <<"string">>
+        , enum => [<<"dog">>, <<"cat">>]
+        , default => <<"cat">>
+        , description => <<"Pet type">>},
+    <<"master">> =>
+        #{type => <<"string">>
+        , description => <<"Master name">>
+        , example => <<"Shawn">>}
+    },
     [{DefinitionName, DefinitionProperties}].
 
 pets_api() ->
     Path = "/pets",
     Metadata = #{
-        post => #{
-            tags => ["pets"],
-            description => "new pets",
-            operationId => new,
-            requestBody => #{
-                description => "Pet",
-                content => #{
-                    'application/json' => #{
-                        schema => cowboy_swagger:schema(<<"pet">>)}}},
-             responses => #{
-                 <<"200">> => #{
-                     description => "new pet"}}},
-        get => #{
-            tags => ["pets"],
+        post =>
+            #{tags => ["pets"],
+             description => "new pets",
+             operationId => new,
+             requestBody => #{
+                 description => "Pet",
+                 content => 
+                    #{'application/json' =>
+                        #{schema => cowboy_swagger:schema(<<"pet">>)}}},
+             responses =>
+                 #{<<"200">> =>
+                     #{description => "new pet"}}},
+        get =>
+           #{tags => ["pets"],
             description => "list pets",
             operationId => list,
-            responses => #{
-                <<"200">> => #{
-                    content => #{
-                        'application/json' => #{
-                            schema => #{
-                                type => array,
-                                items => cowboy_swagger:schema(<<"pet">>)}}}}}},
-        put => #{
-            tags => ["pets"],
-            description => "new master",
-            operationId => new_master,
-            requestBody => #{
-                description => "Pet with new master",
-                content => #{
-                    'application/json' => #{
-                        schema => #{
-                            properties => #{
-                                name => #{type => string, example => <<"Tom">>},
-                                master => #{type => string, example => <<"DDD">>}}}}}},
-            responses => #{
-                <<"200">> => #{
-                    description => "get a new master ok"},
-                <<"404">> => #{
-                    description => "pet name not found"}}}},
+            responses =>
+                #{<<"200">> =>
+                    #{content =>
+                        #{'application/json' =>
+                            #{schema =>
+                                #{type => array , items => cowboy_swagger:schema(<<"pet">>)}}}}}},
+        put =>
+            #{tags => ["pets"],
+                description => "new master",
+                operationId => new_master,
+                requestBody => #{
+                    description => "Pet with new master",
+                    content =>
+                    #{'application/json' =>
+                        #{schema =>
+                            #{properties =>
+                                #{name => #{type => string, example => <<"Tom">>}
+                                , master => #{type => string, example => <<"DDD">>}}}}}},
+                responses =>
+                    #{<<"200">> =>
+                        #{description => "get a new master ok"}
+                    , <<"404">> => #{description => "pet name not found"}}}},
     {Path, Metadata}.
 
 pets_name_api() ->

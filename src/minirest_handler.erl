@@ -24,7 +24,6 @@
 
 -define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
 
-
 -record(callback, {
     path            :: string(),
     module          :: atom(),
