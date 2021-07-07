@@ -16,21 +16,13 @@
 
 -export([init/2]).
 
--export([init_state/4]).
-
 -export([reply/2]).
 
 -include("minirest_http.hrl").
 
--define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
+-include("minirest.hrl").
 
--record(callback, {
-    path            :: string(),
-    module          :: atom(),
-    function        :: atom(),
-    filter          :: fun(),
-    authorization   :: {Module :: atom(), Function :: atom()} | undefined
-}).
+-define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
 
 %%==============================================================================================
 %% cowboy callback init
@@ -50,7 +42,7 @@ handle(Request, State) ->
             do_auth(Request, Callback)
     end.
 
-do_auth(Request, Callback = #callback{authorization = {M, F}}) ->
+do_auth(Request, Callback = #handler{authorization = {M, F}}) ->
     case erlang:apply(M, F, [Request]) of
         ok ->
             do_filter(Request, Callback);
@@ -61,7 +53,7 @@ do_auth(Request, Callback = #callback{authorization = {M, F}}) ->
 do_auth(Request, Callback) ->
     do_filter(Request, Callback).
 
-do_filter(Request, Callback = #callback{filter = Filter}) ->
+do_filter(Request, Callback = #handler{filter = Filter}) ->
     case Filter(Request) of
         {ok, Parameters} ->
             apply_callback(Parameters, Callback);
@@ -69,9 +61,9 @@ do_filter(Request, Callback = #callback{filter = Filter}) ->
             Response
     end.
 
-apply_callback(Parameters, #callback{module = Mod, function = Fun, path = Path}) ->
+apply_callback(Parameters, #handler{method = Method, module = Mod, function = Fun, path = Path}) ->
     try
-        erlang:apply(Mod, Fun, [Parameters])
+        erlang:apply(Mod, Fun, [Method, Parameters])
     catch E:R:S ->
         ?LOG(debug, "path:~p, ~p: ~p: ~p", [Path, E, R, S]),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
@@ -79,17 +71,14 @@ apply_callback(Parameters, #callback{module = Mod, function = Fun, path = Path})
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
-reply({StatusCode0}, Req) ->
-    StatusCode = status_code(StatusCode0),
+reply({StatusCode}, Req) ->
     cowboy_req:reply(StatusCode, Req);
 
-reply({StatusCode0, Body0}, Req) ->
-    StatusCode = status_code(StatusCode0),
+reply({StatusCode, Body0}, Req) ->
     Body = to_json(Body0),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"application/json">>}, Body, Req);
 
-reply({StatusCode0, Headers, Body0}, Req) ->
-    StatusCode = status_code(StatusCode0),
+reply({StatusCode, Headers, Body0}, Req) ->
     Body = to_json(Body0),
     cowboy_req:reply(StatusCode, Headers, Body, Req);
 
@@ -102,46 +91,3 @@ to_json(Data) when is_binary(Data) ->
     Data;
 to_json(Data) when is_map(Data) ->
     jsx:encode(Data).
-
-%%==============================================================================================
-%% start handler
-init_state(Path, Module, Metadata, Authorization) ->
-    Fun =
-        fun(Method0, Options, HandlerState) ->
-            Method = trans_method(Method0),
-            Function = maps:get(operationId, Options),
-            Filter = trans_filter(Method, Options),
-            Callback = #callback{
-                path = Path,
-                module = Module,
-                function = Function,
-                authorization = Authorization,
-                filter = Filter},
-            maps:put(Method, Callback, HandlerState)
-        end,
-    maps:fold(Fun, #{}, Metadata).
-
-status_code(ok) -> 200;
-status_code(Code) -> Code.
-
-trans_method(get)     -> <<"GET">>;
-trans_method(post)    -> <<"POST">>;
-trans_method(put)     -> <<"PUT">>;
-trans_method(head)    -> <<"HEAD">>;
-trans_method(delete)  -> <<"DELETE">>;
-trans_method(patch)   -> <<"PATCH">>;
-trans_method(options) -> <<"OPTION">>;
-trans_method(connect) -> <<"CONNECT">>;
-trans_method(trace)   -> <<"TRACE">>.
-
-%% TODO: filter by metadata
-trans_filter(<<"GET">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(<<"POST">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(<<"PUT">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(<<"DELETE">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(_, _Options) ->
-    fun(Request) -> {ok, Request} end.

@@ -17,36 +17,48 @@
 -define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
 
 -export([ start/2
-        , stop/1]).
+        , stop/1
+        , ref/1]).
 
 start(Name, Options) ->
-    Modules        = maps:get(modules, Options, []),
-    BasePath       = maps:get(base_path, Options, undefined),
-    HttpsEnable    = maps:get(https, Options, false),
-    Authorization  = maps:get(authorization, Options, undefined),
+    Protocol = maps:get(protocol, Options, http),
+    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport = maps:get(swagger_support, Options, true),
-    Port           = maps:get(port, Options),
-    Trails = minirest_trails:get_trails(Modules, BasePath, Authorization, SwaggerSupport),
-    SwaggerSupport andalso trails:store(Trails),
+    SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso set_swagger_global_spec(Options),
-    SwaggerSupport andalso minirest_schema_manager:new(Modules),
+    SwaggerSupport andalso [cowboy_swagger:add_definition(SchemaName, Def)
+        || {SchemaName, Def} <- Schemas],
     Dispatch = trails:single_host_compile(Trails),
+    TransOpts = trans_options(Options),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
-    IgnoreKeys = [ modules
-                 , base_path
-                 , https
-                 , authorization
-                 , swagger_support
-                 , swagger_global_spec
-                 , apps],
-    TransOpts = maps:to_list(maps:without(IgnoreKeys, Options)),
-    StartFunction =
-        case HttpsEnable of
-            false ->
-                start_clear;
-            _ ->
-                start_tls
-        end,
+    start_listener(Protocol, Name, TransOpts, CowboyOptions).
+
+stop(Name) ->
+    cowboy:stop_listener(Name).
+
+ref(Name) ->
+    cowboy_swagger:schema(Name).
+
+%%%==============================================================================================
+%% internal
+trans_options(Options) ->
+    IgnoreKeys =
+        [ modules
+        , base_path
+        , https
+        , authorization
+        , swagger_support
+        , swagger_global_spec
+        , apps],
+    maps:to_list(maps:without(IgnoreKeys, Options)).
+
+start_listener(http, Name, TransOpts, CowboyOptions) ->
+    start_listener_(start_clear, Name, TransOpts, CowboyOptions);
+start_listener(https, Name, TransOpts, CowboyOptions) ->
+    start_listener_(start_tls, Name, TransOpts, CowboyOptions).
+
+start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
+    Port = proplists:get_value(port, TransOpts),
     case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
         {ok, Pid} ->
             ?LOG(info, "Start ~s listener on ~p unsuccessfully: ~0p", [Name, Port, Pid]),
@@ -59,15 +71,10 @@ start(Name, Options) ->
             error(Any)
     end.
 
-stop(Name) ->
-    cowboy:stop_listener(Name).
-
-%%%==============================================================================================
-%% internal
 set_swagger_global_spec(Options) ->
     DefaultGlobalSpec = #{
         swagger => "2.0",
-        info => #{title => "minirest example API", version => " "}
+        info => #{title => "minirest API", version => " "}
     },
     GlobalSpec = maps:get(swagger_global_spec, Options, DefaultGlobalSpec),
     application:set_env(cowboy_swagger, global_spec, GlobalSpec).
