@@ -19,8 +19,7 @@
 
 -include("minirest.hrl").
 
--callback api_spec() -> [api()].
--callback schema_spec() -> [api_schema()].
+-callback api_spec() -> {apis(), api_schemas()}.
 
 -export([find/1]).
 
