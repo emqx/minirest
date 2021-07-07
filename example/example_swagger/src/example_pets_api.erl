@@ -14,26 +14,23 @@
 
 -module(example_pets_api).
 
--export([ rest_api/0
-        , rest_schema/0]).
+-behavior(minirest_api).
 
--export([ new/1
-        , list/1
-        , new_master/1
-        , get_pet/1
-        , remove/1]).
+-export([api_spec/0]).
 
--spec(rest_api() -> [{Path :: string(), Metadata :: map()}]).
-rest_api() ->
-    [pets_api(), pets_name_api()].
+-export([ pets/2
+        , pet/2]).
 
-rest_schema() ->
+api_spec() ->
+    {[pets_api(), pets_name_api()], [pet_schema()]}.
+
+pet_schema() ->
     DefinitionName = <<"pet">>,
     DefinitionProperties = #{
     <<"name">> => #{
         type => <<"string">>,
-        description => <<"Pet name">>,
-        example => <<"Calorie, LiBai and BaiYe">>},
+        description => <<"Pet name, Calorie, LiBai and BaiYe">>,
+        example => <<"Calorie">>},
     <<"animal">> => #{
         type => <<"string">>,
         enum => [<<"dog">>, <<"cat">>],
@@ -43,7 +40,7 @@ rest_schema() ->
         type => <<"string">>,
         description => <<"Master name">>,
         example => <<"Shawn">>}},
-    [{DefinitionName, DefinitionProperties}].
+    {DefinitionName, DefinitionProperties}.
 
 pets_api() ->
     Path = "/pets",
@@ -51,96 +48,96 @@ pets_api() ->
         post => #{
             tags => ["pets"],
             description => "new pets",
-            operationId => new,
-            requestBody => #{
-                description => "Pet",
-                content => #{
-                    'application/json' => #{
-                        schema => cowboy_swagger:schema(<<"pet">>)}}},
-             responses => #{
-                 <<"200">> => #{
-                     description => "new pet"}}},
+            parameters => [
+                #{
+                    name => "pet",
+                    in => body,
+                    schema => minirest:ref(<<"pet">>)
+                }
+            ],
+            responses => #{
+                 <<"200">> => #{description => "new pet"}}},
         get => #{
             tags => ["pets"],
             description => "list pets",
-            operationId => list,
             responses => #{
                 <<"200">> => #{
-                    content => #{
-                        'application/json' => #{
-                            schema => #{
-                                type => array,
-                                items => cowboy_swagger:schema(<<"pet">>)}}}}}},
+                    schema => #{
+                        type => array,
+                        items => minirest:ref(<<"pet">>)}}}},
         put => #{
             tags => ["pets"],
             description => "new master",
-            operationId => new_master,
-            requestBody => #{
-                description => "Pet with new master",
-                content => #{
-                    'application/json' => #{
-                        schema => #{
-                            properties => #{
-                                name => #{type => string, example => <<"Tom">>},
-                                master => #{type => string, example => <<"DDD">>}}}}}},
+            parameters =>[
+                #{
+                    name => newMaster,
+                    in => body,
+                    schema => #{
+                        type => object,
+                        properties => #{
+                            <<"master">> => #{
+                                type => string,
+                                default => <<"DDD">>},
+                            <<"pet_name">> => #{
+                                type => string,
+                                default => <<"Calorie">>}}
+                    }
+                }
+            ],
             responses => #{
                 <<"200">> => #{
                     description => "get a new master ok"},
                 <<"404">> => #{
                     description => "pet name not found"}}}},
-    {Path, Metadata}.
+    {Path, Metadata, pets}.
 
 pets_name_api() ->
     Path = "/pets/:pet_name",
     Metadata = #{
-        get =>
-           #{tags => ["pets"],
+        get => #{
+            tags => ["pets"],
             description => "get pet by id",
-            operationId => get_pet,
-            parameters => [
-                #{name => pet_name
-                , in => path
-                , schema =>
-                #{type => string, example => <<"Tom">>}
-                }],
-            responses =>
-                #{<<"200">> =>
-                    #{content =>
-                    #{'application/json' =>
-                        #{schema => cowboy_swagger:schema(<<"pet">>)}}}
-                , <<"404">> => #{description => "pet name not found"}}},
-        delete =>
-            #{tags => ["pets"],
-                description => "remove pets",
-                operationId => remove,
-                parameters => [
-                    #{name => pet_name
-                    , in => path
-                    , schema =>
-                    #{type => string, example => <<"Tom">>}
-                    }],
-                responses =>
-                    #{<<"200">> =>
-                        #{description => "remove pet ok"}}}},
-    {Path, Metadata}.
+            parameters => [#{
+                name => pet_name,
+                in => path,
+                required => true,
+                type => string,
+                default => <<"Calorie">>}],
+            responses => #{
+                <<"200">> => #{
+                    schema => minirest:ref(<<"pet">>)},
+                <<"404">> => #{
+                    description => "pet name not found"}}},
+        delete => #{
+            tags => ["pets"],
+            description => "remove pets",
+            parameters => [#{
+                name => pet_name,
+                required => true,
+                in => path,
+                type => string,
+                default => <<"Calorie">>
+            }],
+            responses => #{<<"200">> => #{description => "remove pet ok"}}}},
+    {Path, Metadata, pet}.
 
-new(Request) ->
+pets(post, Request) ->
     {ok, Body, _} = cowboy_req:read_body(Request),
     Pet = jsx:decode(Body, [return_maps]),
     Name = maps:get(<<"name">>, Pet),
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:put(Name, Pet, Pets),
     persistent_term:put(pets, NPets),
-    {ok}.
+    {200};
 
-list(_Request) ->
+pets(get, _Request) ->
     StatusCode = 200,
     Headers = #{<<"Content-Type">> => <<"application/json">>},
     Pets = persistent_term:get(pets, #{}),
     Body = jsx:encode(maps:values(Pets)),
     {StatusCode, Headers, Body}.
 
-new_master(Request) ->
+pet(put, Request) ->
     {ok, Body, _} = cowboy_req:read_body(Request),
     PetMaster = jsx:decode(Body, [return_maps]),
     Name = maps:get(<<"name">>, PetMaster),
@@ -153,10 +150,10 @@ new_master(Request) ->
             Pet = maps:put(<<"master">>, NewMaster, Pet0),
             Pets = maps:put(Name, Pet, Pets0),
             persistent_term:put(pets, Pets),
-            {ok}
-    end.
+            {200}
+    end;
 
-get_pet(Request) ->
+pet(get, Request) ->
     PetName = cowboy_req:binding(pet_name, Request),
     Pets = persistent_term:get(pets, #{}),
     case maps:get(PetName, Pets, no_found) of
@@ -165,10 +162,10 @@ get_pet(Request) ->
         Pet ->
             Headers = #{<<"Content-Type">> => <<"application/json">>},
             Body = jsx:encode(Pet),
-            {ok, Headers, Body}
-    end.
+            {200, Headers, Body}
+    end;
 
-remove(Request) ->
+pet(delete, Request) ->
     PetName = cowboy_req:binding(pet_name, Request),
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:remove(PetName, Pets),

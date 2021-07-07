@@ -1,8 +1,8 @@
-{application, example_server,
+{application, example_swagger,
  [{description, "An OTP application"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, {example_server_app, []}},
+  {mod, {example_swagger_app, []}},
   {applications,
    [kernel,
     stdlib
