@@ -24,7 +24,8 @@
 trails_schemas(Options) ->
     Apps = maps:get(apps, Options, []),
     Modules = minirest_api:find(Apps),
-    ModuleApiSpecList = [module_api_spec(Module) || Module <- Modules],
+    Security = maps:get(security, Options, undefined),
+    ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
     {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),
     case maps:get(swagger_support, Options, true) of
         false ->
@@ -64,13 +65,49 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
     HandlerState = maps:fold(Fun, #{}, Metadata),
     trails:trail(append_base_path(BasePath, Path), minirest_handler, HandlerState, Metadata).
 
-module_api_spec(Module) ->
+api_spec(Security, Module) ->
     try
-        {Module, erlang:apply(Module, ?API_SPEC, [])}
+        {Apis, Schemas} = erlang:apply(Module, ?API_SPEC, []),
+        {Module, {[generate_api(Security, Api) || Api <- Apis], Schemas}}
     catch
         E:R:S ->
             ?LOG(error, "Start module ~p fail, ~p: ~p: ~p", [Module, E, R, S]),
             error({start_fail, Module, E, R, S})
+    end.
+
+generate_api(undefined, Api = {Path, _MetaData, _Function}) ->
+    Default = #{tags => [root_path(Path)]},
+    generate_api_(Default, Api);
+generate_api(Security, Api = {Path, _MetaData, _Function}) ->
+    Default = #{
+        tags => [root_path(Path)],
+        security => Security
+    },
+    generate_api_(Default, Api).
+
+generate_api_(Default, {Path, MetaData, Function}) ->
+    {Path, maps:fold(
+               fun(Method, MethodDef0, NextMetaData) ->
+                   MethodDef =
+                       lists:foldl(
+                           fun(Key, NMethodDef) ->
+                               case maps:is_key(Key, NMethodDef) of
+                                   true ->
+                                       NMethodDef;
+                                   false ->
+                                       maps:put(Key, maps:get(Key, Default), NMethodDef)
+                               end
+                           end, MethodDef0, maps:keys(Default)),
+                   maps:put(Method, MethodDef, NextMetaData)
+               end,
+        #{}, MetaData), Function}.
+
+root_path(Path) ->
+    case string:tokens(Path, "/") of
+        [] ->
+            "/";
+        [Root | _] ->
+            Root
     end.
 
 append_base_path(undefined, Path) ->

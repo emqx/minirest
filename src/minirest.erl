@@ -43,7 +43,8 @@ ref(Name) ->
 %% internal
 trans_options(Options) ->
     IgnoreKeys =
-        [ base_path
+        [ security
+        , base_path
         , protocol
         , authorization
         , swagger_support
