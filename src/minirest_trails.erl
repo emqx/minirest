@@ -53,12 +53,13 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
         fun(MethodAtom, MethodDef, HandlerState) ->
             Method = trans_method(MethodAtom),
             Filter = trans_filter(Method, MethodDef),
+            Security = maps:get(security, MethodDef, []),
             Callback = #handler{
                 method = MethodAtom,
                 path = Path,
                 module = Module,
                 function = Function,
-                authorization = Authorization,
+                authorization = Security =/= [] andalso Authorization,
                 filter = Filter},
             maps:put(Method, Callback, HandlerState)
         end,
