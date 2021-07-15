@@ -46,6 +46,8 @@ do_auth(Request, Callback = #handler{authorization = {M, F}}) ->
     case erlang:apply(M, F, [Request]) of
         ok ->
             do_filter(Request, Callback);
+        Response when is_tuple(Response) ->
+            Response;
         _ ->
             {?RESPONSE_CODE_UNAUTHORIZED}
     end;
