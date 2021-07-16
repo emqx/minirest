@@ -7,8 +7,7 @@
 -type api() :: {path(), mete_data(), callback_function()}.
 -type apis() :: [api()].
 
--type schema_name() :: string() | binary().
--type api_schema() :: {schema_name(), map()}.
+-type api_schema() :: map().
 -type api_schemas() :: [api_schema()].
 
 -type api_spec() :: {apis(), api_schemas()}.
