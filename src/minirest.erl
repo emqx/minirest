@@ -22,12 +22,11 @@
 
 start(Name, Options) ->
     Protocol = maps:get(protocol, Options, http),
-    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport = maps:get(swagger_support, Options, true),
-    SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso set_swagger_global_spec(Options),
-    SwaggerSupport andalso [cowboy_swagger:add_definition(SchemaName, Def)
-        || {SchemaName, Def} <- Schemas],
+    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
+    SwaggerSupport andalso trails:store(Name, Trails),
+    SwaggerSupport andalso [add_schema(Schema) || Schema <- Schemas],
     Dispatch = trails:single_host_compile(Trails),
     TransOpts = trans_options(Options),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
@@ -41,6 +40,11 @@ ref(Name) ->
 
 %%%==============================================================================================
 %% internal
+add_schema({Schema}) ->
+    cowboy_swagger:add_definition(Schema);
+add_schema({DefName, Def}) ->
+    cowboy_swagger:add_definition(DefName, Def).
+
 trans_options(Options) ->
     IgnoreKeys =
         [ security
