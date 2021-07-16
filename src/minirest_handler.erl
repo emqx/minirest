@@ -91,5 +91,5 @@ reply(BadReturn, Req) ->
 
 to_json(Data) when is_binary(Data) ->
     Data;
-to_json(Data) when is_map(Data) ->
+to_json(Data) ->
     jsx:encode(Data).
