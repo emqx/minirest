@@ -26,7 +26,7 @@ start(Name, Options) ->
     SwaggerSupport andalso set_swagger_global_spec(Options),
     {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport andalso trails:store(Name, Trails),
-    SwaggerSupport andalso [add_schema(Schema) || Schema <- Schemas],
+    SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
     Dispatch = trails:single_host_compile(Trails),
     TransOpts = trans_options(Options),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
@@ -40,10 +40,6 @@ ref(Name) ->
 
 %%%==============================================================================================
 %% internal
-add_schema({Schema}) ->
-    cowboy_swagger:add_definition(Schema);
-add_schema({DefName, Def}) ->
-    cowboy_swagger:add_definition(DefName, Def).
 
 trans_options(Options) ->
     IgnoreKeys =
