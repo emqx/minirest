@@ -27,7 +27,7 @@ start(Name, Options) ->
     {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
-    Dispatch = trails:single_host_compile(Trails),
+    Dispatch = merge_dispatch(Trails, Options),
     TransOpts = trans_options(Options),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
     start_listener(Protocol, Name, TransOpts, CowboyOptions).
@@ -49,11 +49,20 @@ trans_options(Options) ->
         [ security
         , base_path
         , protocol
+        , dispatch
         , authorization
         , swagger_support
         , swagger_global_spec
         , apps],
     maps:to_list(maps:without(IgnoreKeys, Options)).
+
+merge_dispatch(Trails, #{dispatch := Dispatch0}) ->
+    [{Host, CowField, RestDispatch}] = trails:single_host_compile(Trails),
+    [{_, _, Dispatch}] = cowboy_router:compile([{'_', Dispatch0}]),
+    [{Host, CowField, RestDispatch ++ Dispatch}];
+
+merge_dispatch(Trails, _)->
+    trails:single_host_compile(Trails).
 
 start_listener(http, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_clear, Name, TransOpts, CowboyOptions);
