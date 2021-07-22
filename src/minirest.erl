@@ -35,6 +35,9 @@ start(Name, Options) ->
 stop(Name) ->
     cowboy:stop_listener(Name).
 
+ref(Name) when is_atom(Name) ->
+    ref(atom_to_binary(Name, utf8));
+
 ref(Name) ->
     cowboy_swagger:schema(Name).
 
