@@ -35,13 +35,16 @@ find_api_modules(Apps) ->
     lists:append([app_modules(App) || App <- Apps]).
 
 app_modules(App) ->
+    app_modules_(App, behavior) ++ app_modules_(App, behaviour).
+
+app_modules_(App, BehaviourOrBehavior) ->
     case application:get_key(App, modules) of
         undefined ->
             error({error_app, App});
         {ok, Modules} ->
             Fun =
                 fun(Module, ApiModules) ->
-                    case proplists:get_value(behavior, Module:module_info(attributes), undefined) of
+                    case proplists:get_value(BehaviourOrBehavior, Module:module_info(attributes), undefined) of
                         [minirest_api] ->
                             [Module | ApiModules];
                         _ ->
