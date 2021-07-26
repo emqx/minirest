@@ -12,7 +12,6 @@
 start(_StartType, _StartArgs) ->
     application:ensure_all_started(minirest),
     BasePath = "/minirest_example",
-    Apps = [example_swagger],
     Authorization = undefined,
     GlobalSpec =
         #{
@@ -24,7 +23,7 @@ start(_StartType, _StartArgs) ->
         #{
             port => 8088,
             base_path => BasePath,
-            apps => Apps,
+            modules => [example_hello_api, example_pets_api],
             authorization => Authorization,
             swagger_global_spec => GlobalSpec
         },
