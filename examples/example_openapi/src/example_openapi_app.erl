@@ -32,7 +32,7 @@ start(_StartType, _StartArgs) ->
                     in => header}}}},
     Minirest = #{
         base_path => BasePath,
-        apps => [?APP],
+        modules => [example_hello_api],
         authorization => Authorization,
         security => [#{application => []}],
         swagger_global_spec => GlobalSpec},

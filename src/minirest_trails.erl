@@ -22,9 +22,8 @@
 -export([trails_schemas/1]).
 
 trails_schemas(Options) ->
-    Apps = maps:get(apps, Options, []),
+    Modules = maps:get(modules, Options, []),
     Name = maps:get(name, Options),
-    Modules = minirest_api:find(Apps),
     Security = maps:get(security, Options, undefined),
     ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
     {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),

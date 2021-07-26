@@ -53,7 +53,8 @@ trans_options(Options) ->
         , authorization
         , swagger_support
         , swagger_global_spec
-        , apps],
+        , modules
+        ],
     maps:to_list(maps:without(IgnoreKeys, Options)).
 
 merge_dispatch(Trails, #{dispatch := Dispatch0}) ->

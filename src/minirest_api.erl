@@ -15,41 +15,25 @@
 %%--------------------------------------------------------------------
 -module(minirest_api).
 
--define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
-
 -include("minirest.hrl").
 
 -callback api_spec() -> api_spec().
+-export([find_api_modules/1]).
 
--export([find/1]).
-
--spec(find([App :: atom()]) -> [Module :: atom()]).
-find(Apps) ->
-    find_api_modules(Apps).
-
-%%==============================================================================================
-%% internal
-find_api_modules([]) ->
-    [];
 find_api_modules(Apps) ->
-    lists:append([app_modules(App) || App <- Apps]).
+    find_api_modules(Apps, []).
 
-app_modules(App) ->
-    app_modules_(App, behavior) ++ app_modules_(App, behaviour).
-
-app_modules_(App, BehaviourOrBehavior) ->
+find_api_modules([], Acc) ->
+    Acc;
+find_api_modules([App | Apps], Acc) ->
     case application:get_key(App, modules) of
-        undefined ->
-            error({error_app, App});
+        undefined -> Acc;
         {ok, Modules} ->
-            Fun =
-                fun(Module, ApiModules) ->
-                    case proplists:get_value(BehaviourOrBehavior, Module:module_info(attributes), undefined) of
-                        [minirest_api] ->
-                            [Module | ApiModules];
-                        _ ->
-                            ApiModules
-                    end
-                end,
-            lists:foldl(Fun, [], Modules)
+            NewAcc = lists:filter(fun(Module) ->
+                    Info = Module:module_info(attributes),
+                    Behaviour = proplists:get_value(behavior, Info, []) ++
+                                    proplists:get_value(behaviour, Info, []),
+                    lists:member(minirest_api, Behaviour)
+            end, Modules),
+            find_api_modules(Apps, NewAcc ++ Acc)
     end.
