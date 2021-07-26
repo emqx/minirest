@@ -23,6 +23,7 @@
 
 trails_schemas(Options) ->
     Apps = maps:get(apps, Options, []),
+    Name = maps:get(name, Options),
     Modules = minirest_api:find(Apps),
     Security = maps:get(security, Options, undefined),
     ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
@@ -31,7 +32,7 @@ trails_schemas(Options) ->
         false ->
             {Trails0, Schemas};
         _ ->
-            {Trails0 ++ trails:trails([cowboy_swagger_handler]), Schemas}
+            {Trails0 ++ trails:trails([{cowboy_swagger_handler, #{server => Name}}]), Schemas}
     end.
 
 trails_schemas(Options, ModuleApiSpecList) ->
