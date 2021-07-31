@@ -14,11 +14,11 @@
 
 -module(minirest).
 
--define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
-
 -export([ start/2
         , stop/1
         , ref/1]).
+
+-include("minirest.hrl").
 
 start(Name, Options) ->
     Protocol = maps:get(protocol, Options, http),
@@ -74,14 +74,22 @@ start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
     Port = proplists:get_value(port, TransOpts),
     case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
         {ok, Pid} ->
-            ?LOG(info, "Start ~s listener on ~p unsuccessfully: ~0p", [Name, Port, Pid]),
+            ?LOG(info, #{msg => "started_listener_ok",
+                         name => Name,
+                         port => Port,
+                         pid => Pid}),
             {ok, Pid};
-        {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p failed: ~0p", [Name, Port, eaddrinuse]),
-            error(eaddrinuse);
-        {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p failed: ~0p", [Name, Port, Any]),
-            error(Any)
+        {error, Reason} ->
+            LogData =  #{msg => "failed_to_start_listener",
+                         port => Port,
+                         reason => Reason},
+            case Reason of
+                eaddrinuse ->
+                    ?LOG(error, LogData#{description => "the_port_is_in_use"});
+                _ ->
+                    ?LOG(error, LogData)
+            end,
+            error(Reason)
     end.
 
 set_swagger_global_spec(Options) ->
