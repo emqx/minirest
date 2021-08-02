@@ -17,8 +17,6 @@
 
 -include("minirest.hrl").
 
--define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
-
 -export([trails_schemas/1]).
 
 trails_schemas(Options) ->
@@ -72,8 +70,7 @@ api_spec(Security, Module) ->
         {Module, {[generate_api(Security, Api) || Api <- Apis], Schemas}}
     catch
         E:R:S ->
-            ?LOG(error, "Start module ~p fail, ~p: ~p: ~p", [Module, E, R, S]),
-            error({start_fail, Module, E, R, S})
+            erlang:raise(E, {minirest_trails_api_spec_error, R}, S)
     end.
 
 generate_api(undefined, Api = {Path, _MetaData, _Function}) ->

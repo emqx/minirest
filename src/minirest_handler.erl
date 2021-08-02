@@ -22,8 +22,6 @@
 
 -include("minirest.hrl").
 
--define(LOG(Level, Format, Args), logger:Level("Minirest: " ++ Format, Args)).
-
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
@@ -67,7 +65,10 @@ apply_callback(Parameters, #handler{method = Method, module = Mod, function = Fu
     try
         erlang:apply(Mod, Fun, [Method, Parameters])
     catch E:R:S ->
-        ?LOG(debug, "path:~p, ~p: ~p: ~p", [Path, E, R, S]),
+        ?LOG(debug, #{path => Path,
+                      exception => E,
+                      reason => R,
+                      stacktrace => S}),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
         Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
