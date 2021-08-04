@@ -69,6 +69,12 @@ dispatch(Path, Req, Routes, Filter) ->
 dispatch(Req, Route, undefined) ->
     dispatch(Req, Route);
 
+dispatch(Req, Route, {Mod, Fun}) ->
+    case erlang:apply(Mod, Fun, [Route]) of
+        true -> dispatch(Req, Route);
+        false -> reply(404, <<"Not found.">>, Req)
+    end;
+
 dispatch(Req, Route, Filter) ->
     case Filter(Route) of
         true -> dispatch(Req, Route);

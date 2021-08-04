@@ -132,6 +132,14 @@ match_handler(Path, [Handler = #{prefix := Prefix} | Handlers]) ->
 add_slash("/" ++ _ = Path) -> Path;
 add_slash(Path) -> "/" ++ Path.
 
+apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := {Mod, Fun}}}) ->
+    case erlang:apply(Mod, Fun, [Req]) of
+        true  -> apply_handler(Req, Path, MFArgs);
+        false ->
+            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+                             <<"UNAUTHORIZED">>, Req)
+    end;
+
 apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
     case AuthFun(Req) of
         true  -> apply_handler(Req, Path, MFArgs);
