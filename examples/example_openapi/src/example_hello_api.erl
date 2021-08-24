@@ -46,8 +46,8 @@ hello_api() ->
                                 type => string}}}}}}},
     {"/hello", MetaData, hello}.
 
-hello(get, Request) ->
-    Content = cowboy_req:header(<<"accept">>, Request),
+hello(get, #{headers := Headers}) ->
+    Content = maps:get(<<"accept">>, Headers),
     Body = case Content of
         <<"text/plain">> ->
             <<"hello, minirest">>;
