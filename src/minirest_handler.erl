@@ -63,9 +63,26 @@ do_filter(Request, Callback = #handler{filter = Filter}) ->
             Response
     end.
 
-apply_callback(Parameters, #handler{method = Method, module = Mod, function = Fun, path = Path}) ->
+apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, path = Path}) ->
     try
-        erlang:apply(Mod, Fun, [Method, Parameters])
+        BodyParams = case cowboy_req:has_body(Request) of
+            true  ->
+                {_, Body0, _} = cowboy_req:read_body(Request),
+                jsx:decode(Body0);
+            false -> #{}
+        end,
+        Params = #{
+            bindings => cowboy_req:bindings(Request),
+            query_string => cowboy_req:qs(Request),
+            headers => cowboy_req:headers(Request),
+            body => BodyParams
+        },
+        case erlang:function_exported(Mod, Fun, 3) of
+            true ->
+                erlang:apply(Mod, Fun, [Method, Params, Request]);
+            false ->
+                erlang:apply(Mod, Fun, [Method, Params])
+        end
     catch E:R:S ->
         ?LOG(debug, "path:~p, ~p: ~p: ~p", [Path, E, R, S]),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
