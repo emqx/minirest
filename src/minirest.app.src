@@ -2,7 +2,6 @@
 [{description, "A mini RESTful API framework built on cowboy and swagger"},
  {vsn, "1.1.7"},
  {registered, []},
- {mod, {minirest_app, []}},
  {applications,
   [ kernel
   , stdlib
