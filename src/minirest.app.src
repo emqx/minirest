@@ -1,6 +1,6 @@
 {application, minirest,
 [{description, "A mini RESTful API framework built on cowboy and swagger"},
- {vsn, "1.1.7"},
+ {vsn, "1.2.0"},
  {registered, []},
  {applications,
   [ kernel
