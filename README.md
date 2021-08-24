@@ -82,20 +82,20 @@ hello(get, #{bindings := Bindins,
 % The first parameter is Method
 % The second argument is the parsed parameters, including (bindings, query_string, headers, body)
 % The third argument is the request of cowboy
-% -export([hello/3]).
-% hello(Method, #{bindings := Bindins,
-%                 body := Body,
-%                 query_string := QueryString,
-%                 headers := Headers}, Request) ->
-%     Content = maps:get(<<"accept">>, Headers),
-%     Body =
-%         case Content of
-%             <<"text/plain">> ->
-%                 <<"hello, minirest">>;
-%              <<"application/json">> ->
-%                 #{msg => <<"hello minirest">>}
-%         end,
-%     {200, #{<<"content-type">> => Content},  Body}.
+-export([hello/3]).
+hello(Method, #{bindings := Bindins,
+                body := Body,
+                query_string := QueryString,
+                headers := Headers}, Request) ->
+    Content = maps:get(<<"accept">>, Headers),
+    Body =
+        case Content of
+            <<"text/plain">> ->
+                <<"hello, minirest">>;
+             <<"application/json">> ->
+                #{msg => <<"hello minirest">>}
+        end,
+    {200, #{<<"content-type">> => Content},  Body}.
 
 ```
 
