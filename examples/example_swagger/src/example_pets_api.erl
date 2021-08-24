@@ -121,27 +121,23 @@ pets_name_api() ->
             responses => #{<<"200">> => #{description => "remove pet ok"}}}},
     {Path, Metadata, pet}.
 
-pets(post, Request) ->
-    {ok, Body, _} = cowboy_req:read_body(Request),
-    Pet = jsx:decode(Body, [return_maps]),
-    Name = maps:get(<<"name">>, Pet),
+pets(post, #{body := Body}) ->
+    Name = maps:get(<<"name">>, Body),
     Pets = persistent_term:get(pets, #{}),
-    NPets = maps:put(Name, Pet, Pets),
+    NPets = maps:put(Name, Body, Pets),
     persistent_term:put(pets, NPets),
     {200};
 
-pets(get, _Request) ->
+pets(get, _Params) ->
     StatusCode = 200,
     Headers = #{<<"Content-Type">> => <<"application/json">>},
     Pets = persistent_term:get(pets, #{}),
     Body = jsx:encode(maps:values(Pets)),
     {StatusCode, Headers, Body}.
 
-pet(put, Request) ->
-    {ok, Body, _} = cowboy_req:read_body(Request),
-    PetMaster = jsx:decode(Body, [return_maps]),
-    Name = maps:get(<<"name">>, PetMaster),
-    NewMaster = maps:get(<<"master">>, PetMaster),
+pet(put, #{body := Body}) ->
+    Name = maps:get(<<"name">>, Body),
+    NewMaster = maps:get(<<"master">>, Body),
     Pets0 = persistent_term:get(pets, #{}),
     case maps:get(Name, Pets0, no_found) of
         no_found ->
@@ -153,8 +149,8 @@ pet(put, Request) ->
             {200}
     end;
 
-pet(get, Request) ->
-    PetName = cowboy_req:binding(pet_name, Request),
+pet(get, #{bindings := Bindings}) ->
+    PetName = maps:get(pet_name, Bindings),
     Pets = persistent_term:get(pets, #{}),
     case maps:get(PetName, Pets, no_found) of
         no_found ->
@@ -165,8 +161,8 @@ pet(get, Request) ->
             {200, Headers, Body}
     end;
 
-pet(delete, Request) ->
-    PetName = cowboy_req:binding(pet_name, Request),
+pet(delete, #{bindings := Bindings}) ->
+    PetName = maps:get(pet_name, Bindings),
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:remove(PetName, Pets),
     persistent_term:put(pets, NPets),

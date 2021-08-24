@@ -71,7 +71,7 @@ apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, 
         end,
         Params = #{
             bindings => cowboy_req:bindings(Request),
-            query_string => cowboy_req:qs(Request),
+            query_string => cowboy_req:parse_qs(Request),
             headers => cowboy_req:headers(Request),
             body => BodyParams
         },

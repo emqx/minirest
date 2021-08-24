@@ -33,7 +33,7 @@ api_spec() ->
                         type => string}}}}},
     {[{Path, Metadata, hello}], []}.
 
-hello(_Method, _Request) ->
+hello(_Method, _Params) ->
     StatusCode = 200,
     Headers = #{<<"Content-Type">> => <<"text/plain">>},
     Body = <<"hello world !">>,
