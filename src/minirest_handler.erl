@@ -82,21 +82,30 @@ apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, 
                 erlang:apply(Mod, Fun, [Method, Params])
         end
     catch E:R:S ->
-        ?LOG(debug, #{path => Path,
-                      exception => E,
-                      reason => R,
-                      stacktrace => S}),
+        ?LOG(warning, #{path => Path,
+                        exception => E,
+                        reason => R,
+                        stacktrace => S}),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
         Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
+reply(StatusCode, Req) when is_integer(StatusCode) ->
+    cowboy_req:reply(StatusCode, Req);
 reply({StatusCode}, Req) ->
     cowboy_req:reply(StatusCode, Req);
 
 reply({StatusCode, Body0}, Req) ->
     Body = to_json(Body0),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"application/json">>}, Body, Req);
+
+reply({ErrorStatus, Code, Message}, Req) 
+        when (ErrorStatus < 200 orelse ErrorStatus >= 300)
+             andalso is_atom(Code)
+             andalso is_binary(Message) ->
+    Body = #{code => Code, message => Message},
+    reply({ErrorStatus, Body}, Req);
 
 reply({StatusCode, Headers, Body0}, Req) ->
     Body = to_json(Body0),
