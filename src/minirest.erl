@@ -22,7 +22,7 @@
 -include("minirest.hrl").
 
 start(Name, Options) ->
-    start(Name, ranch_opts(Options), maps:without([ranch_opts], Options).
+    start(Name, ranch_opts(Options), maps:without([ranch_opts], Options)).
 
 start(Name, RanchOptions, Options) ->
     Protocol = maps:get(protocol, Options, http),

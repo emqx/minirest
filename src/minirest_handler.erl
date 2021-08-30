@@ -100,15 +100,16 @@ reply({StatusCode, Body0}, Req) ->
     Body = to_json(Body0),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"application/json">>}, Body, Req);
 
-reply({StatusCode, Headers, Body0}, Req) ->
-    Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, Headers, Body, Req);
 reply({ErrorStatus, Code, Message}, Req) 
         when (ErrorStatus >= 300 orelse ErrorStatus < 200)
              andalso is_atom(Code)
              andalso is_binary(Message) ->
     Body = #{code => Code, message => Message},
-    reply({ErrorStatus, Body});
+    reply({ErrorStatus, Body}, Req);
+
+reply({StatusCode, Headers, Body0}, Req) ->
+    Body = to_json(Body0),
+    cowboy_req:reply(StatusCode, Headers, Body, Req);
 
 reply(BadReturn, Req) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
