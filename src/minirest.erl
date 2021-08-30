@@ -68,7 +68,7 @@ start_listener(https, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_tls, Name, TransOpts, CowboyOptions).
 
 start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
-    Port = proplists:get_value(port, TransOpts),
+    Port = maps:get(port, TransOpts),
     case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
         {ok, Pid} ->
             ?LOG(info, #{msg => "started_listener_ok",
