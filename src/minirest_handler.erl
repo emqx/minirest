@@ -91,6 +91,8 @@ apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, 
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
+reply(StatusCode, Req) when is_integer(StatusCode) ->
+    cowboy_req:reply(StatusCode, Req);
 reply({StatusCode}, Req) ->
     cowboy_req:reply(StatusCode, Req);
 
@@ -101,6 +103,12 @@ reply({StatusCode, Body0}, Req) ->
 reply({StatusCode, Headers, Body0}, Req) ->
     Body = to_json(Body0),
     cowboy_req:reply(StatusCode, Headers, Body, Req);
+reply({ErrorStatus, Code, Message}, Req) 
+        when (ErrorStatus >= 300 orelse ErrorStatus < 200)
+             andalso is_atom(Code)
+             andalso is_binary(Message) ->
+    Body = #{code => Code, message => Message},
+    reply({ErrorStatus, Body});
 
 reply(BadReturn, Req) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
