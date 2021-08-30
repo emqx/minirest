@@ -49,8 +49,6 @@ ref(Name) ->
 
 ranch_opts(#{protocol := http, ranch_options := RanchOpts}) ->
     RanchOpts;
-ranch_opts(#{protocol := http}) ->
-    [{port, 18083}];
 ranch_opts(#{protocol := https, ranch_options := RanchOpts}) ->
     RanchOpts.
 

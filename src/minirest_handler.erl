@@ -101,7 +101,7 @@ reply({StatusCode, Body0}, Req) ->
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"application/json">>}, Body, Req);
 
 reply({ErrorStatus, Code, Message}, Req) 
-        when (ErrorStatus >= 300 orelse ErrorStatus < 200)
+        when (ErrorStatus < 200 orelse ErrorStatus >= 300)
              andalso is_atom(Code)
              andalso is_binary(Message) ->
     Body = #{code => Code, message => Message},
