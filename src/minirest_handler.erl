@@ -82,10 +82,10 @@ apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, 
                 erlang:apply(Mod, Fun, [Method, Params])
         end
     catch E:R:S ->
-        ?LOG(debug, #{path => Path,
-                      exception => E,
-                      reason => R,
-                      stacktrace => S}),
+        ?LOG(warning, #{path => Path,
+                        exception => E,
+                        reason => R,
+                        stacktrace => S}),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
         Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}

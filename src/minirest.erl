@@ -15,12 +15,16 @@
 -module(minirest).
 
 -export([ start/2
+        , start/3
         , stop/1
         , ref/1]).
 
 -include("minirest.hrl").
 
 start(Name, Options) ->
+    start(Name, ranch_opts(Options), maps:without([ranch_opts], Options).
+
+start(Name, RanchOptions, Options) ->
     Protocol = maps:get(protocol, Options, http),
     SwaggerSupport = maps:get(swagger_support, Options, true),
     SwaggerSupport andalso set_swagger_global_spec(Options),
@@ -28,9 +32,8 @@ start(Name, Options) ->
     SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
     Dispatch = merge_dispatch(Trails, Options),
-    TransOpts = trans_options(Options),
     CowboyOptions = #{env => #{dispatch => Dispatch}},
-    start_listener(Protocol, Name, TransOpts, CowboyOptions).
+    start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
 stop(Name) ->
     cowboy:stop_listener(Name).
@@ -44,18 +47,12 @@ ref(Name) ->
 %%%==============================================================================================
 %% internal
 
-trans_options(Options) ->
-    IgnoreKeys =
-        [ security
-        , base_path
-        , protocol
-        , dispatch
-        , authorization
-        , swagger_support
-        , swagger_global_spec
-        , modules
-        ],
-    maps:to_list(maps:without(IgnoreKeys, Options)).
+ranch_opts(#{protocol := http, ranch_options := RanchOpts}) ->
+    RanchOpts;
+ranch_opts(#{protocol := http}) ->
+    [{port, 18083}];
+ranch_opts(#{protocol := https, ranch_options := RanchOpts}) ->
+    RanchOpts.
 
 merge_dispatch(Trails, #{dispatch := Dispatch0}) ->
     [{Host, CowField, RestDispatch}] = trails:single_host_compile(Trails),
