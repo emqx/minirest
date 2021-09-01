@@ -88,7 +88,7 @@ start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
     end.
 
 get_port(L) when is_list(L) ->
-    proplists:get_value(port, TransOpts);
+    proplists:get_value(port, L);
 get_port(#{port := Port}) -> Port;
 get_port(#{socket_opts := #{port := Port}}) -> Port;
 get_port(_) -> undefined.
