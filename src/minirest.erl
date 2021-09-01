@@ -66,7 +66,7 @@ start_listener(https, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_tls, Name, TransOpts, CowboyOptions).
 
 start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
-    Port = proplists:get_value(port, TransOpts),
+    Port = get_port(TransOpts),
     case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
         {ok, Pid} ->
             ?LOG(info, #{msg => "started_listener_ok",
@@ -86,6 +86,12 @@ start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
             end,
             error(Reason)
     end.
+
+get_port(L) when is_list(L) ->
+    proplists:get_value(port, L);
+get_port(#{port := Port}) -> Port;
+get_port(#{socket_opts := #{port := Port}}) -> Port;
+get_port(_) -> undefined.
 
 set_swagger_global_spec(Options) ->
     DefaultGlobalSpec = #{
