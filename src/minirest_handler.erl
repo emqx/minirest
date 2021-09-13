@@ -22,6 +22,16 @@
 
 -include("minirest.hrl").
 
+-define(try_reply_json(BODY, REQ, EXPR),
+    case to_json(BODY) of
+        invalid_json_term ->
+            cowboy_req:reply(?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
+                #{<<"content-type">> => <<"text/plain">>},
+                list_to_binary(io_lib:format("invalid json term: ~p", [BODY])), REQ);
+        JSON ->
+            EXPR
+    end).
+
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
@@ -53,45 +63,46 @@ do_auth(Request, Callback = #handler{authorization = {M, F}}) ->
 do_auth(Request, Callback) ->
     do_filter(Request, Callback).
 
-do_filter(Request, Callback = #handler{filter = Filter}) ->
-    case Filter(Request) of
-        {ok, Parameters} ->
-            apply_callback(Parameters, Callback);
-        Response ->
-            Response
+do_filter(Request, Handler) ->
+    #handler{filter = Filter, path = Path, module = Mod,
+        method = Method} = Handler,
+    Params = parse_params(Request),
+    case is_function(Filter, 2) of
+        true ->
+            case Filter(Params, #{path => Path, module => Mod, method => Method}) of
+                {ok, NewParams} ->
+                    apply_callback(Request, NewParams, Handler);
+                Response ->
+                    Response
+            end;
+        false ->
+            apply_callback(Request, Params, Handler)
     end.
 
-apply_callback(Request, Handler) ->
-    #handler{
-        method = Method,
-        module = Mod,
-        function = Fun,
-        path = Path,
-        pre_transform = PreTransform
-    } = Handler,
-    try
-        BodyParams = case cowboy_req:has_body(Request) of
-            true  ->
+parse_params(Request) ->
+    BodyParams =
+        case cowboy_req:has_body(Request) of
+            true ->
                 {_, Body0, _} = cowboy_req:read_body(Request),
                 jsx:decode(Body0);
             false -> #{}
         end,
-        Params = #{
-            bindings => cowboy_req:bindings(Request),
-            query_string => maps:from_list(cowboy_req:parse_qs(Request)),
-            headers => cowboy_req:headers(Request),
-            body => BodyParams
-        },
-        case apply_pre_transform(PreTransform, Mod, Path, Method, Params) of
-            {ok, NewParams} ->
-                Args =
-                    case erlang:function_exported(Mod, Fun, 3) of
-                        true -> [Method, NewParams, Request];
-                        false -> [Method, NewParams]
-                    end,
-                erlang:apply(Mod, Fun, Args);
-            {error, Reason} -> {?RESPONSE_CODE_BAD_REQUEST, Reason}
-        end
+    #{
+        bindings => cowboy_req:bindings(Request),
+        query_string => maps:from_list(cowboy_req:parse_qs(Request)),
+        headers => cowboy_req:headers(Request),
+        body => BodyParams
+    }.
+
+apply_callback(Request, Params, Handler) ->
+    #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
+    try
+        Args =
+            case erlang:function_exported(Mod, Fun, 3) of
+                true -> [Method, Params, Request];
+                false -> [Method, Params]
+            end,
+        erlang:apply(Mod, Fun, Args)
     catch E:R:S ->
         ?LOG(warning, #{path => Path,
                         exception => E,
@@ -102,18 +113,15 @@ apply_callback(Request, Handler) ->
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
-apply_pre_transform(undefined, _Mod, _Path, _Method, Params) -> {ok, Params};
-apply_pre_transform(Func, Mod, Path, Method, Params) ->
-    apply(Func, [Mod, Path, Method, Params]).
-
 reply(StatusCode, Req) when is_integer(StatusCode) ->
     cowboy_req:reply(StatusCode, Req);
 reply({StatusCode}, Req) ->
     cowboy_req:reply(StatusCode, Req);
 
 reply({StatusCode, Body0}, Req) ->
-    Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"application/json">>}, Body, Req);
+    ?try_reply_json(Body0, Req,
+        cowboy_req:reply(StatusCode,
+            #{<<"content-type">> => <<"application/json">>}, JSON, Req));
 
 reply({ErrorStatus, Code, Message}, Req) 
         when (ErrorStatus < 200 orelse ErrorStatus >= 300)
@@ -123,8 +131,8 @@ reply({ErrorStatus, Code, Message}, Req)
     reply({ErrorStatus, Body}, Req);
 
 reply({StatusCode, Headers, Body0}, Req) ->
-    Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, Headers, Body, Req);
+    ?try_reply_json(Body0, Req,
+        cowboy_req:reply(StatusCode, Headers, JSON, Req));
 
 reply(BadReturn, Req) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
@@ -134,4 +142,9 @@ reply(BadReturn, Req) ->
 to_json(Data) when is_binary(Data) ->
     Data;
 to_json(Data) ->
-    jsx:encode(Data).
+    case jsx:is_term(Data) of
+        true ->
+            jsx:encode(Data);
+        false ->
+            invalid_json_term
+    end.

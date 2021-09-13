@@ -37,7 +37,6 @@
     module          :: atom(),
     function        :: atom(),
     filter          :: fun(),
-    pre_transform :: fun() | undefined,
     authorization   :: {Module :: atom(), Function :: atom()} | undefined
 }).
 
