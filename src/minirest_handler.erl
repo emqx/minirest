@@ -63,34 +63,46 @@ do_auth(Request, Callback = #handler{authorization = {M, F}}) ->
 do_auth(Request, Callback) ->
     do_filter(Request, Callback).
 
-do_filter(Request, Callback = #handler{filter = Filter}) ->
-    case Filter(Request) of
-        {ok, Parameters} ->
-            apply_callback(Parameters, Callback);
-        Response ->
-            Response
+do_filter(Request, Handler) ->
+    #handler{filter = Filter, path = Path, module = Mod,
+        method = Method} = Handler,
+    Params = parse_params(Request),
+    case is_function(Filter, 2) of
+        true ->
+            case Filter(Params, #{path => Path, module => Mod, method => Method}) of
+                {ok, NewParams} ->
+                    apply_callback(Request, NewParams, Handler);
+                Response ->
+                    Response
+            end;
+        false ->
+            apply_callback(Request, Params, Handler)
     end.
 
-apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, path = Path}) ->
-    try
-        BodyParams = case cowboy_req:has_body(Request) of
-            true  ->
+parse_params(Request) ->
+    BodyParams =
+        case cowboy_req:has_body(Request) of
+            true ->
                 {_, Body0, _} = cowboy_req:read_body(Request),
                 jsx:decode(Body0);
             false -> #{}
         end,
-        Params = #{
-            bindings => cowboy_req:bindings(Request),
-            query_string => maps:from_list(cowboy_req:parse_qs(Request)),
-            headers => cowboy_req:headers(Request),
-            body => BodyParams
-        },
-        case erlang:function_exported(Mod, Fun, 3) of
-            true ->
-                erlang:apply(Mod, Fun, [Method, Params, Request]);
-            false ->
-                erlang:apply(Mod, Fun, [Method, Params])
-        end
+    #{
+        bindings => cowboy_req:bindings(Request),
+        query_string => maps:from_list(cowboy_req:parse_qs(Request)),
+        headers => cowboy_req:headers(Request),
+        body => BodyParams
+    }.
+
+apply_callback(Request, Params, Handler) ->
+    #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
+    try
+        Args =
+            case erlang:function_exported(Mod, Fun, 3) of
+                true -> [Method, Params, Request];
+                false -> [Method, Params]
+            end,
+        erlang:apply(Mod, Fun, Args)
     catch E:R:S ->
         ?LOG(warning, #{path => Path,
                         exception => E,

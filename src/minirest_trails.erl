@@ -47,18 +47,21 @@ trails_schemas(BasePath, Authorization, {Module, {Apis, Schemas}}) ->
     {Trails, Schemas}.
 
 trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
+    trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, #{}});
+trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
     Fun =
         fun(MethodAtom, MethodDef, HandlerState) ->
             Method = trans_method(MethodAtom),
-            Filter = trans_filter(Method, MethodDef),
             Security = maps:get(security, MethodDef, []),
+            Filter = maps:get(filter, Options, undefined),
             Callback = #handler{
                 method = MethodAtom,
                 path = Path,
                 module = Module,
                 function = Function,
                 authorization = Security =/= [] andalso Authorization,
-                filter = Filter},
+                filter = Filter
+                },
             maps:put(Method, Callback, HandlerState)
         end,
     HandlerState = maps:fold(Fun, #{}, Metadata),
@@ -122,15 +125,3 @@ trans_method(patch)   -> <<"PATCH">>;
 trans_method(options) -> <<"OPTION">>;
 trans_method(connect) -> <<"CONNECT">>;
 trans_method(trace)   -> <<"TRACE">>.
-
-%% TODO: filter by metadata
-trans_filter(<<"GET">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(<<"POST">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(<<"PUT">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(<<"DELETE">>, _Options) ->
-    fun(Request) -> {ok, Request} end;
-trans_filter(_, _Options) ->
-    fun(Request) -> {ok, Request} end.
