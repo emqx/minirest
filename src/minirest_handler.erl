@@ -61,7 +61,14 @@ do_filter(Request, Callback = #handler{filter = Filter}) ->
             Response
     end.
 
-apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, path = Path}) ->
+apply_callback(Request, Handler) ->
+    #handler{
+        method = Method,
+        module = Mod,
+        function = Fun,
+        path = Path,
+        pre_transform = PreTransform
+    } = Handler,
     try
         BodyParams = case cowboy_req:has_body(Request) of
             true  ->
@@ -75,11 +82,15 @@ apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, 
             headers => cowboy_req:headers(Request),
             body => BodyParams
         },
-        case erlang:function_exported(Mod, Fun, 3) of
-            true ->
-                erlang:apply(Mod, Fun, [Method, Params, Request]);
-            false ->
-                erlang:apply(Mod, Fun, [Method, Params])
+        case apply_pre_conversion(PreTransform, Mod, Path, Method, Params) of
+            {ok, NewParams} ->
+                Args =
+                    case erlang:function_exported(Mod, Fun, 3) of
+                        true -> [Method, NewParams, Request];
+                        false -> [Method, NewParams]
+                    end,
+                erlang:apply(Mod, Fun, Args);
+            {error, Reason} -> {?RESPONSE_CODE_BAD_REQUEST, Reason}
         end
     catch E:R:S ->
         ?LOG(warning, #{path => Path,
@@ -90,6 +101,10 @@ apply_callback(Request, #handler{method = Method, module = Mod, function = Fun, 
         Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
+
+apply_pre_conversion(undefined, _Mod, _Path, _Method, Params) -> {ok, Params};
+apply_pre_conversion(Func, Mod, Path, Method, Params) ->
+    apply(Func, [Mod, Path, Method, Params]).
 
 reply(StatusCode, Req) when is_integer(StatusCode) ->
     cowboy_req:reply(StatusCode, Req);

@@ -47,18 +47,23 @@ trails_schemas(BasePath, Authorization, {Module, {Apis, Schemas}}) ->
     {Trails, Schemas}.
 
 trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
+    trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, #{}});
+trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
     Fun =
         fun(MethodAtom, MethodDef, HandlerState) ->
             Method = trans_method(MethodAtom),
             Filter = trans_filter(Method, MethodDef),
             Security = maps:get(security, MethodDef, []),
+            PreTransform = maps:get(pre_transform, Options, undefined),
             Callback = #handler{
                 method = MethodAtom,
                 path = Path,
                 module = Module,
                 function = Function,
                 authorization = Security =/= [] andalso Authorization,
-                filter = Filter},
+                filter = Filter,
+                pre_transform = PreTransform
+                },
             maps:put(Method, Callback, HandlerState)
         end,
     HandlerState = maps:fold(Fun, #{}, Metadata),
