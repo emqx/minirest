@@ -22,6 +22,16 @@
 
 -include("minirest.hrl").
 
+-define(try_reply_json(BODY, REQ, EXPR),
+    case to_json(BODY) of
+        invalid_json_term ->
+            cowboy_req:reply(?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
+                #{<<"content-type">> => <<"text/plain">>},
+                list_to_binary(io_lib:format("invalid json term: ~p", [BODY])), REQ);
+        JSON ->
+            EXPR
+    end).
+
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
@@ -97,8 +107,9 @@ reply({StatusCode}, Req) ->
     cowboy_req:reply(StatusCode, Req);
 
 reply({StatusCode, Body0}, Req) ->
-    Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"application/json">>}, Body, Req);
+    ?try_reply_json(Body0, Req,
+        cowboy_req:reply(StatusCode,
+            #{<<"content-type">> => <<"application/json">>}, JSON, Req));
 
 reply({ErrorStatus, Code, Message}, Req) 
         when (ErrorStatus < 200 orelse ErrorStatus >= 300)
@@ -108,8 +119,8 @@ reply({ErrorStatus, Code, Message}, Req)
     reply({ErrorStatus, Body}, Req);
 
 reply({StatusCode, Headers, Body0}, Req) ->
-    Body = to_json(Body0),
-    cowboy_req:reply(StatusCode, Headers, Body, Req);
+    ?try_reply_json(Body0, Req,
+        cowboy_req:reply(StatusCode, Headers, JSON, Req));
 
 reply(BadReturn, Req) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
@@ -123,5 +134,5 @@ to_json(Data) ->
         true ->
             jsx:encode(Data);
         false ->
-            error({invalid_json_term, Data})
+            invalid_json_term
     end.
