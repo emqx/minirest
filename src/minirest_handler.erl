@@ -119,4 +119,9 @@ reply(BadReturn, Req) ->
 to_json(Data) when is_binary(Data) ->
     Data;
 to_json(Data) ->
-    jsx:encode(Data).
+    case jsx:is_term(Data) of
+        true ->
+            jsx:encode(Data);
+        false ->
+            error({invalid_json_term, Data})
+    end.
