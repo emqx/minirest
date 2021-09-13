@@ -82,7 +82,7 @@ apply_callback(Request, Handler) ->
             headers => cowboy_req:headers(Request),
             body => BodyParams
         },
-        case apply_pre_conversion(PreTransform, Mod, Path, Method, Params) of
+        case apply_pre_transform(PreTransform, Mod, Path, Method, Params) of
             {ok, NewParams} ->
                 Args =
                     case erlang:function_exported(Mod, Fun, 3) of
@@ -102,8 +102,8 @@ apply_callback(Request, Handler) ->
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
-apply_pre_conversion(undefined, _Mod, _Path, _Method, Params) -> {ok, Params};
-apply_pre_conversion(Func, Mod, Path, Method, Params) ->
+apply_pre_transform(undefined, _Mod, _Path, _Method, Params) -> {ok, Params};
+apply_pre_transform(Func, Mod, Path, Method, Params) ->
     apply(Func, [Mod, Path, Method, Params]).
 
 reply(StatusCode, Req) when is_integer(StatusCode) ->
