@@ -76,17 +76,19 @@ api_spec(Security, Module) ->
             erlang:raise(E, {minirest_trails_api_spec_error, R}, S)
     end.
 
-generate_api(undefined, Api = {Path, _MetaData, _Function}) ->
+generate_api(Security, {Path, MetaData, Function}) ->
+    generate_api(Security, {Path, MetaData, Function, #{}});
+generate_api(undefined, Api = {Path, _MetaData, _Function, _Options}) ->
     Default = #{tags => [root_path(Path)]},
     generate_api_(Default, Api);
-generate_api(Security, Api = {Path, _MetaData, _Function}) ->
+generate_api(Security, Api = {Path, _MetaData, _Function, _Options}) ->
     Default = #{
         tags => [root_path(Path)],
         security => Security
     },
     generate_api_(Default, Api).
 
-generate_api_(Default, {Path, MetaData, Function}) ->
+generate_api_(Default, {Path, MetaData, Function, Options}) ->
     {Path, maps:fold(
                fun(Method, MethodDef0, NextMetaData) ->
                    MethodDef =
@@ -101,7 +103,7 @@ generate_api_(Default, {Path, MetaData, Function}) ->
                            end, MethodDef0, maps:keys(Default)),
                    maps:put(Method, MethodDef, NextMetaData)
                end,
-        #{}, MetaData), Function}.
+        #{}, MetaData), Function, Options}.
 
 root_path(Path) ->
     case string:tokens(Path, "/") of

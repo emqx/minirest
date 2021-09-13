@@ -123,7 +123,7 @@ reply({StatusCode, Body0}, Req) ->
         cowboy_req:reply(StatusCode,
             #{<<"content-type">> => <<"application/json">>}, JSON, Req));
 
-reply({ErrorStatus, Code, Message}, Req) 
+reply({ErrorStatus, Code, Message}, Req)
         when (ErrorStatus < 200 orelse ErrorStatus >= 300)
              andalso is_atom(Code)
              andalso is_binary(Message) ->
