@@ -19,3 +19,9 @@ rebar.lock
 rebar3.crashdump
 .rebar3/
 .idea
+erlang_ls.config
+# Emacs Backup files
+*~
+# Emacs temporary files
+.#*
+*#
