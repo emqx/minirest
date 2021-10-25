@@ -65,18 +65,23 @@ do_auth(Request, Callback) ->
 
 do_filter(Request, Handler) ->
     #handler{filter = Filter, path = Path, module = Mod,
-        method = Method} = Handler,
-    Params = parse_params(Request),
-    case is_function(Filter, 2) of
-        true ->
-            case Filter(Params, #{path => Path, module => Mod, method => Method}) of
-                {ok, NewParams} ->
-                    apply_callback(Request, NewParams, Handler);
-                Response ->
-                    Response
-            end;
-        false ->
-            apply_callback(Request, Params, Handler)
+             method = Method} = Handler,
+    case parse_params(Request) of
+        #{body := {error, bad_json}} ->
+            Body = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
+            {?RESPONSE_CODE_BAD_REQUEST, Body};
+        Params ->
+            case is_function(Filter, 2) of
+                true ->
+                    case Filter(Params, #{path => Path, module => Mod, method => Method}) of
+                        {ok, NewParams} ->
+                            apply_callback(Request, NewParams, Handler);
+                        Response ->
+                            Response
+                    end;
+                false ->
+                    apply_callback(Request, Params, Handler)
+            end
     end.
 
 parse_params(Request) ->
@@ -84,7 +89,9 @@ parse_params(Request) ->
         case cowboy_req:has_body(Request) of
             true ->
                 {_, Body0, _} = cowboy_req:read_body(Request),
-                jsx:decode(Body0);
+                try jsx:decode(Body0)
+                catch _ : _ -> {error, bad_json}
+                end;
             false -> #{}
         end,
     #{
