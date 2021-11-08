@@ -32,7 +32,7 @@ start(Name, RanchOptions, Options) ->
     SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
     Dispatch = merge_dispatch(Trails, Options),
-    CowboyOptions = #{env => #{dispatch => Dispatch}},
+    CowboyOptions = middlewares(Options, #{env => #{dispatch => Dispatch}}),
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
 stop(Name) ->
@@ -59,6 +59,12 @@ merge_dispatch(Trails, #{dispatch := Dispatch0}) ->
 
 merge_dispatch(Trails, _)->
     trails:single_host_compile(Trails).
+
+middlewares(#{middlewares := []}, CowboyOptions) -> CowboyOptions;
+middlewares(#{middlewares := [cowboy_router, cowboy_handler]}, CowboyOptions) -> CowboyOptions;
+middlewares(#{middlewares := Middlewares}, CowboyOptions) when is_list(Middlewares) ->
+    maps:put(middlewares, Middlewares, CowboyOptions);
+middlewares(_, CowboyOptions) -> CowboyOptions.
 
 start_listener(http, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_clear, Name, TransOpts, CowboyOptions);
