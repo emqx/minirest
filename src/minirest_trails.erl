@@ -19,6 +19,8 @@
 
 -export([trails_schemas/1]).
 
+-define(HANDLER, minirest_handler).
+
 trails_schemas(Options) ->
     Modules = maps:get(modules, Options, []),
     Name = maps:get(name, Options),
@@ -50,22 +52,20 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
     trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, #{}});
 trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
     Fun =
-        fun(MethodAtom, MethodDef, HandlerState) ->
-            Method = trans_method(MethodAtom),
-            Security = maps:get(security, MethodDef, []),
-            Filter = maps:get(filter, Options, undefined),
-            Callback = #handler{
-                method = MethodAtom,
-                path = Path,
-                module = Module,
-                function = Function,
-                authorization = Security =/= [] andalso Authorization,
-                filter = Filter
+        fun(Method, MethodDef, HandlerStates) ->
+            HandlerState = #handler{
+                method        = Method,
+                path          = Path,
+                module        = Module,
+                function      = Function,
+                authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
+                filter        = maps:get(filter, Options, undefined)
                 },
-            maps:put(Method, Callback, HandlerState)
+            maps:put(binary_method(Method), HandlerState, HandlerStates)
         end,
-    HandlerState = maps:fold(Fun, #{}, Metadata),
-    trails:trail(append_base_path(BasePath, Path), minirest_handler, HandlerState, Metadata).
+    HandlerStates = maps:fold(Fun, #{}, Metadata),
+    CompletePath  = append_base_path(BasePath, Path),
+    trails:trail(CompletePath, ?HANDLER, HandlerStates, Metadata).
 
 api_spec(Security, Module) ->
     try
@@ -118,12 +118,12 @@ append_base_path(undefined, Path) ->
 append_base_path(BasePath, Path) ->
     lists:append(BasePath, Path).
 
-trans_method(get)     -> <<"GET">>;
-trans_method(post)    -> <<"POST">>;
-trans_method(put)     -> <<"PUT">>;
-trans_method(head)    -> <<"HEAD">>;
-trans_method(delete)  -> <<"DELETE">>;
-trans_method(patch)   -> <<"PATCH">>;
-trans_method(options) -> <<"OPTION">>;
-trans_method(connect) -> <<"CONNECT">>;
-trans_method(trace)   -> <<"TRACE">>.
+binary_method(get)     -> <<"GET">>;
+binary_method(post)    -> <<"POST">>;
+binary_method(put)     -> <<"PUT">>;
+binary_method(head)    -> <<"HEAD">>;
+binary_method(delete)  -> <<"DELETE">>;
+binary_method(patch)   -> <<"PATCH">>;
+binary_method(options) -> <<"OPTION">>;
+binary_method(connect) -> <<"CONNECT">>;
+binary_method(trace)   -> <<"TRACE">>.
