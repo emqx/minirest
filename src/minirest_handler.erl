@@ -46,60 +46,56 @@ handle(Request, State) ->
     case maps:get(Method, State, undefined) of
         undefined ->
             {?RESPONSE_CODE_METHOD_NOT_ALLOWED, #{<<"allow">> => [maps:keys(State)]}, <<"">>};
-        Callback ->
-            do_auth(Request, Callback)
+        Handler ->
+            do_auth(Request, Handler)
     end.
 
-do_auth(Request, Callback = #handler{authorization = {M, F}}) ->
+do_auth(Request, Handler = #handler{authorization = {M, F}}) ->
     case erlang:apply(M, F, [Request]) of
         ok ->
-            do_filter(Request, Callback);
+            do_parse_params(Request, Handler);
         Response when is_tuple(Response) ->
             Response;
         _ ->
             {?RESPONSE_CODE_UNAUTHORIZED}
     end;
 
-do_auth(Request, Callback) ->
-    do_filter(Request, Callback).
+do_auth(Request, Handler) ->
+    do_parse_params(Request, Handler).
 
-do_filter(Request, Handler) ->
-    #handler{filter = Filter, path = Path, module = Mod,
-             method = Method} = Handler,
-    case parse_params(Request) of
-        #{body := {error, bad_json}} ->
-            Body = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
-            {?RESPONSE_CODE_BAD_REQUEST, Body};
-        Params ->
-            case is_function(Filter, 2) of
-                true ->
-                    case Filter(Params, #{path => Path, module => Mod, method => Method}) of
-                        {ok, NewParams} ->
-                            apply_callback(Request, NewParams, Handler);
-                        Response ->
-                            Response
-                    end;
-                false ->
-                    apply_callback(Request, Params, Handler)
-            end
-    end.
-
-parse_params(Request) ->
-    BodyParams =
-        case cowboy_req:has_body(Request) of
-            true ->
-                {_, Body0, _} = cowboy_req:read_body(Request),
-                try jsx:decode(Body0)
-                catch _ : _ -> {error, bad_json}
-                end;
-            false -> #{}
-        end,
-    #{
+do_parse_params(Request, Handler) ->
+    Params = #{
         bindings => cowboy_req:bindings(Request),
         query_string => maps:from_list(cowboy_req:parse_qs(Request)),
-        headers => cowboy_req:headers(Request),
-        body => BodyParams
-    }.
+        headers => cowboy_req:headers(Request)
+    },
+    do_read_body(Request, Params, Handler).
+
+do_read_body(Request, Params, Handler) ->
+    case cowboy_req:has_body(Request) of
+        true ->
+            case minirest_body:parse(Request) of
+                {ok, {Body, NRequest}} ->
+                    do_filter(NRequest, Params#{body => Body}, Handler);
+                {response, Response} ->
+                    Response
+            end;
+        false ->
+            do_filter(Request, Params, Handler)
+    end.
+
+do_filter(Request, Params, #handler{filter = Filter,
+                                    path = Path,
+                                    module = Mod,
+                                    method = Method} = Handler) when is_function(Filter, 2) ->
+    case Filter(Params, #{path => Path, module => Mod, method => Method}) of
+        {ok, NewParams} ->
+            apply_callback(Request, NewParams, Handler);
+        Response ->
+            Response
+    end;
+do_filter(Request, Params, Handler) ->
+    apply_callback(Request, Params, Handler).
 
 apply_callback(Request, Params, Handler) ->
     #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
