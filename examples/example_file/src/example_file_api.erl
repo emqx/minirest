@@ -14,13 +14,14 @@
 
 -module(example_file_api).
 
+-behaviour(minirest_api).
+
 -export([start/0]).
 
 -export([api_spec/0]).
 
--export([upload_file/2]).
-
--behaviour(minirest_api).
+-export([ upload_file/2
+        , download_file/2]).
 
 start() ->
     application:ensure_all_started(minirest),
@@ -38,7 +39,10 @@ start() ->
     minirest:start(?MODULE, Ranch, Minirest).
 
 api_spec() ->
-    {[file_upload_api()], []}.
+    {
+        [file_upload_api(), file_download_api()],
+        []
+    }.
 
 file_upload_api() ->
     MetaData = #{
@@ -63,7 +67,23 @@ file_upload_api() ->
                     content => #{}}}}},
     {"/file/upload", MetaData, upload_file}.
 
+file_download_api() ->
+    MetaData = #{
+        get => #{
+            description => "file download",
+            responses => #{
+                <<"200">> => #{
+                    content => #{}}}}},
+    {"/file/download", MetaData, download_file}.
+
 upload_file(M, P) ->
     io:format("method : ~p~n", [M]),
     io:format("req    : ~p~n", [P]),
-    200.
+    204.
+
+download_file(M, P) ->
+    io:format("method : ~p~n", [M]),
+    io:format("req    : ~p~n", [P]),
+    {ok, Path} = file:get_cwd(),
+    File = Path ++ "/src/example_file_api.erl",
+    {200, {sendfile, File}}.

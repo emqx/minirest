@@ -22,6 +22,8 @@
 
 -include("minirest.hrl").
 
+-include_lib("kernel/include/file.hrl").
+
 -define(try_reply_json(BODY, REQ, EXPR),
     case to_json(BODY) of
         invalid_json_term ->
@@ -121,6 +123,10 @@ reply(StatusCode, Req) when is_integer(StatusCode) ->
 reply({StatusCode}, Req) ->
     cowboy_req:reply(StatusCode, Req);
 
+reply({StatusCode, {sendfile, File}}, Req) ->
+    {ok, #file_info{size = Size}} = file:read_file_info(File),
+    cowboy_req:reply(StatusCode, #{}, {sendfile, 0, Size, File}, Req);
+
 reply({StatusCode, Body0}, Req) ->
     ?try_reply_json(Body0, Req,
         cowboy_req:reply(StatusCode,
@@ -132,6 +138,10 @@ reply({ErrorStatus, Code, Message}, Req)
              andalso is_binary(Message) ->
     Body = #{code => Code, message => Message},
     reply({ErrorStatus, Body}, Req);
+
+reply({StatusCode, Headers, {sendfile, File}}, Req) ->
+    {ok, #file_info{size = Size}} = file:read_file_info(File),
+    cowboy_req:reply(StatusCode, Headers, {sendfile, 0, Size, File}, Req);
 
 reply({StatusCode, Headers, Body0}, Req) ->
     ?try_reply_json(Body0, Req,
