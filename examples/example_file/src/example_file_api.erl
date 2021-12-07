@@ -40,7 +40,7 @@ start() ->
 
 api_spec() ->
     {
-        [file_upload_api(), file_download_api()],
+        [file_upload_api(), file_download_api(), temporary_file_download_api()],
         []
     }.
 
@@ -76,6 +76,15 @@ file_download_api() ->
                     content => #{}}}}},
     {"/file/download", MetaData, download_file}.
 
+temporary_file_download_api() ->
+    MetaData = #{
+        get => #{
+            description => "temporary file download, delete after send",
+            responses => #{
+                <<"200">> => #{
+                    content => #{}}}}},
+    {"/file/temporary/download", MetaData, download_temporary_file}.
+
 upload_file(M, P) ->
     io:format("method : ~p~n", [M]),
     io:format("req    : ~p~n", [P]),
@@ -87,3 +96,12 @@ download_file(M, P) ->
     {ok, Path} = file:get_cwd(),
     File = Path ++ "/src/example_file_api.erl",
     {200, {sendfile, File}}.
+
+download_temporary_file() ->
+    io:format("method : ~p~n", [M]),
+    io:format("req    : ~p~n", [P]),
+    FileName = "temporary.txt",
+    ok = file:write(FileName, <<"hello">>),
+    {ok, Path} = file:get_cwd(),
+    File = Path ++ FileName,
+    {200, {sendfile, File, [{delete_after_send, true}]}}.
