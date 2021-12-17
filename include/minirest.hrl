@@ -31,6 +31,24 @@
 
 -type http_method() :: get | post | put | head | delete | patch | options | connect | trace.
 
+-type status_code()     :: integer().
+-type headers()         :: map()
+                           | list().
+-type response_body()   :: binary()
+                           | jsx:json_term()
+                           | {form_data, map()
+                                         | list()}
+                           | {sendfile, Path :: binary()}.
+
+-type error_code()      :: atom() | binary().
+-type error_message()   :: binary().
+
+-type response()        :: status_code()
+                           | {status_code()}
+                           | {status_code(), response_body()}
+                           | {status_code(), headers(), response_body()}
+                           | {status_code(), error_code(), error_message()}.
+
 -record(handler, {
     method          :: http_method(),
     path            :: string(),

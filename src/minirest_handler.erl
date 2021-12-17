@@ -129,8 +129,7 @@ reply({StatusCode, {sendfile, File}}, Req) ->
 reply({StatusCode, {sendfile, File, Options}}, Req) ->
     case file:read_file_info(File) of
         {ok, #file_info{size = Size}} ->
-            cowboy_req:reply(StatusCode, #{}, {sendfile, 0, Size, File}, Req),
-            after_send_file(File, Options);
+            cowboy_req:reply(StatusCode, #{}, {sendfile, 0, Size, File}, Req);
         {error, Reason} ->
             StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
             Body = io_lib:format("mini rest file api bad return ~p", [Reason]),
@@ -170,12 +169,4 @@ to_json(Data) ->
             jsx:encode(Data);
         false ->
             invalid_json_term
-    end.
-
-after_send_file(File, Options) ->
-    case proplists:get_value(delete_after_send, Options, false) of
-        true ->
-            ok = file:delete(File);
-        false ->
-            ignore
     end.
