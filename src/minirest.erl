@@ -137,7 +137,9 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := {Mod,
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
             cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
-                             <<"UNAUTHORIZED">>, Req)
+                             <<"UNAUTHORIZED">>, Req);
+        {error, {lock_user, ResponseBody}} ->
+            cowboy_req:reply(401, #{}, ResponseBody, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
@@ -145,7 +147,9 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthF
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
             cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
-                             <<"UNAUTHORIZED">>, Req)
+                             <<"UNAUTHORIZED">>, Req);
+        {error, {lock_user, ResponseBody}} ->
+            cowboy_req:reply(401, #{}, ResponseBody, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs}) ->
