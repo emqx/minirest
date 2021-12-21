@@ -1,12 +1,15 @@
 {application, minirest,
- [{description, "A mini RESTful API framework built on cowboy and jiffy"},
-  {id, "minirest"},
-  {vsn, "git"},
-  {modules, []},
-  {registered, []},
-  {applications, [kernel,stdlib,jiffy,cowboy]},
-  {env, []},
-  {licenses, ["Apache-2.0"]},
-  {maintainers, ["EMQ X Team <contact@emqx.io>"]},
-  {links, ["Github", "https://github.com/emqx/minirest"]}
- ]}.
+[{description, "A mini RESTful API framework built on cowboy and swagger"},
+ {vsn, "git"},
+ {registered, []},
+ {applications,
+  [ kernel
+  , stdlib
+  , cowboy_swagger
+  ]},
+ {env,[]},
+ {modules, []},
+ {licenses, ["Apache 2.0"]},
+ {links, ["Github", "https://github.com/emqx/minirest"]}
+]
+}.

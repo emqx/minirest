@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2013-2021 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -14,181 +14,95 @@
 
 -module(minirest).
 
--include_lib("kernel/include/file.hrl").
+-export([ start/2
+        , start/3
+        , stop/1
+        , ref/1]).
 
--export([ start_http/3
-        , start_https/3
-        , stop_http/1
-        ]).
+-include("minirest.hrl").
 
--export([handler/1]).
+start(Name, Options) ->
+    start(Name, ranch_opts(Options), maps:without([ranch_options], Options)).
 
--export([ return/0
-        , return/1
-        , return_file/1
-        ]).
+start(Name, RanchOptions, Options) ->
+    Protocol = maps:get(protocol, Options, http),
+    SwaggerSupport = maps:get(swagger_support, Options, true),
+    SwaggerSupport andalso set_swagger_global_spec(Options),
+    {Trails, Schemas} = minirest_trails:trails_schemas(Options#{name => Name}),
+    SwaggerSupport andalso trails:store(Name, Trails),
+    SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
+    Dispatch = merge_dispatch(Trails, Options),
+    CowboyOptions = middlewares(Options, #{env => #{dispatch => Dispatch}}),
+    start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
-%% Cowboy callback
--export([init/2]).
+stop(Name) ->
+    cowboy:stop_listener(Name).
 
--define(SUCCESS, 0).
+ref(Name) when is_atom(Name) ->
+    ref(atom_to_binary(Name, utf8));
 
--define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
+ref(Name) ->
+    cowboy_swagger:schema(Name).
 
--type(option() :: {authorization, fun()}).
--type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
+%%%==============================================================================================
+%% internal
 
--export_type([ option/0
-             , handler/0
-             ]).
+ranch_opts(#{protocol := http, ranch_options := RanchOpts}) ->
+    RanchOpts;
+ranch_opts(#{protocol := https, ranch_options := RanchOpts}) ->
+    RanchOpts.
 
-%%------------------------------------------------------------------------------
-%% Start/Stop Http
-%%------------------------------------------------------------------------------
+merge_dispatch(Trails, #{dispatch := Dispatch0}) ->
+    [{Host, CowField, RestDispatch}] = trails:single_host_compile(Trails),
+    [{_, _, Dispatch}] = cowboy_router:compile([{'_', Dispatch0}]),
+    [{Host, CowField, RestDispatch ++ Dispatch}];
 
--spec(start_http(atom(), list(), list()) -> {ok, pid()}).
-start_http(ServerName, Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
-        {ok, _}  -> ok;
-        {error, {already_started, _}} -> ok;
-        {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
-            error(eaddrinuse);
-        {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: ~0p", [ServerName, get_port(Options), Any]),
-            error(Any)
-    end,
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
+merge_dispatch(Trails, _)->
+    trails:single_host_compile(Trails).
 
--spec(start_https(atom(), list(), list()) -> {ok, pid()}).
-start_https(ServerName, Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
-        {ok, _}  -> ok;
-        {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
-            error(eaddrinuse);
-        {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: ~0p", [ServerName, get_port(Options), Any]),
-            error(Any)
-    end,
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
+middlewares(#{middlewares := []}, CowboyOptions) -> CowboyOptions;
+middlewares(#{middlewares := [cowboy_router, cowboy_handler]}, CowboyOptions) -> CowboyOptions;
+middlewares(#{middlewares := Middlewares}, CowboyOptions) when is_list(Middlewares) ->
+    maps:put(middlewares, Middlewares, CowboyOptions);
+middlewares(_, CowboyOptions) -> CowboyOptions.
 
--spec(stop_http(atom()) -> ok | {error, any()}).
-stop_http(ServerName) ->
-    cowboy:stop_listener(ServerName).
+start_listener(http, Name, TransOpts, CowboyOptions) ->
+    start_listener_(start_clear, Name, TransOpts, CowboyOptions);
+start_listener(https, Name, TransOpts, CowboyOptions) ->
+    start_listener_(start_tls, Name, TransOpts, CowboyOptions).
 
-get_port(#{socket_opts := SocketOpts}) ->
-    proplists:get_value(port, SocketOpts, 18083).
-
-map({Prefix, MFArgs}) ->
-    map({Prefix, MFArgs, []});
-map({Prefix, MFArgs, Options}) ->
-    #{prefix => Prefix, mfargs => MFArgs, options => maps:from_list(Options)}.
-
-handlers(Handlers) ->
-    lists:map(fun
-        ({Prefix, minirest, HHs}) -> {Prefix, minirest, [map(HH) || HH <- HHs]};
-        (Handler) -> Handler
-    end, Handlers).
-
-%%------------------------------------------------------------------------------
-%% Handler helper
-%%------------------------------------------------------------------------------
-
--spec(handler(minirest_handler:config()) -> handler()).
-handler(Config) -> minirest_handler:init(Config).
-
-%%------------------------------------------------------------------------------
-%% Cowboy callbacks
-%%------------------------------------------------------------------------------
-
-init(Req, Opts) ->
-    Req1 = handle_request(Req, Opts),
-    {ok, Req1, Opts}.
-
-%% Callback
-handle_request(Req, Handlers) ->
-    case match_handler(binary_to_list(cowboy_req:path(Req)), Handlers) of
-        {ok, Path, Handler} ->
-            try
-                apply_handler(Req, Path, Handler)
-            catch _:Error:Stacktrace ->
-                internal_error(Req, Error, Stacktrace)
-            end;
-        not_found ->
-            cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
+start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
+    Port = get_port(TransOpts),
+    case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
+        {ok, Pid} ->
+            ?LOG(info, #{msg => "started_listener_ok",
+                         name => Name,
+                         port => Port,
+                         pid => Pid}),
+            {ok, Pid};
+        {error, Reason} ->
+            LogData =  #{msg => "failed_to_start_listener",
+                         port => Port,
+                         reason => Reason},
+            case Reason of
+                eaddrinuse ->
+                    ?LOG(error, LogData#{description => "the_port_is_in_use"});
+                _ ->
+                    ?LOG(error, LogData)
+            end,
+            error(Reason)
     end.
 
-match_handler(_Path, []) ->
-    not_found;
-match_handler(Path, [Handler = #{prefix := Prefix} | Handlers]) ->
-    case string:prefix(Path, Prefix) of
-        nomatch -> match_handler(Path, Handlers);
-        RelPath -> {ok, add_slash(RelPath), Handler}
-    end.
+get_port(L) when is_list(L) ->
+    proplists:get_value(port, L);
+get_port(#{port := Port}) -> Port;
+get_port(#{socket_opts := #{port := Port}}) -> Port;
+get_port(_) -> undefined.
 
-add_slash("/" ++ _ = Path) -> Path;
-add_slash(Path) -> "/" ++ Path.
-
-apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
-    case AuthFun(Req) of
-        true  -> apply_handler(Req, Path, MFArgs);
-        false ->
-            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
-                             <<"UNAUTHORIZED">>, Req)
-    end;
-
-apply_handler(Req, Path, #{mfargs := MFArgs}) ->
-    apply_handler(Req, Path, MFArgs);
-
-apply_handler(Req, Path, {M, F, Args}) ->
-    erlang:apply(M, F, [Path, Req | Args]).
-
-internal_error(Req, Error, Stacktrace) ->
-    error_logger:error_msg("~s ~s error: ~p, stacktrace:~n~p",
-                           [cowboy_req:method(Req), cowboy_req:path(Req), Error, Stacktrace]),
-    cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
-
-%%------------------------------------------------------------------------------
-%% Return
-%%------------------------------------------------------------------------------
-
-return_file(File) ->
-    {ok, #file_info{size = Size}} = file:read_file_info(File),
-    Headers = #{
-      <<"content-type">> => <<"application/octet-stream">>,
-      <<"content-disposition">> => iolist_to_binary("attachment; filename=" ++ filename:basename(File))
+set_swagger_global_spec(Options) ->
+    DefaultGlobalSpec = #{
+        swagger => "2.0",
+        info => #{title => "minirest API", version => " "}
     },
-    {file, Headers, {sendfile, 0, Size, File}}.
-
-return() ->
-    {ok, #{code => ?SUCCESS}}.
-
-return(ok) ->
-    {ok, #{code => ?SUCCESS}};
-return({ok, #{data := Data, meta := Meta}}) ->
-    {ok, #{code => ?SUCCESS,
-           data => Data,
-           meta => Meta}};
-return({ok, Data}) ->
-    {ok, #{code => ?SUCCESS,
-           data => Data}};
-return({ok, Code, Message}) when is_integer(Code) ->
-    {ok, #{code => Code,
-           message => format_msg(Message)}};
-return({ok, Data, Meta}) ->
-    {ok, #{code => ?SUCCESS,
-           data => Data,
-           meta => Meta}};
-return({error, Message}) ->
-    {ok, #{message => format_msg(Message)}};
-return({error, Code, Message}) ->
-    {ok, #{code => Code,
-           message => format_msg(Message)}}.
-
-format_msg(Message) when is_binary(Message) ->
-    Message;
-format_msg(Message) ->
-    iolist_to_binary(io_lib:format("~0p", [Message])).
+    GlobalSpec = maps:get(swagger_global_spec, Options, DefaultGlobalSpec),
+    application:set_env(cowboy_swagger, global_spec, GlobalSpec).

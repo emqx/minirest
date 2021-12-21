@@ -1,54 +1,129 @@
-
 # minirest
 
-A mini RESTful API framework built on cowboy and jsx.
+A mini RESTful API framework built on cowboy and swagger
 
-## Write a RESTful API Module
+# UseAge
+## Create erlang application
 
-```
--module(rest_api_books).
-
--rest_api(#{name   => list_books,
-            method => 'GET',
-            path   => "/books/",
-            func   => list,
-            descr  => "List books"}).
-
--rest_api(#{name   => get_book,
-            method => 'GET',
-            path   => "/books/:id",
-            func   => get,
-            descr  => "Get book by Id"}).
-
--export([list/2, get/2]).
-
-list(Binding, _Params) ->
-    Books = [#{id => I, name => list_to_binary("book" ++ integer_to_list(I))}
-             || I <- lists:seq(1, 100)],
-    {200, Books}.
-
-get(#{id := Id}, _Params) ->
-    {200, #{id => Id, name => list_to_binary("book" ++ Id)}}.
+```shell
+rebar3 new app my_server
 ```
 
-## Start the REST server
+## Add dep
+open `rebar.config` and add minirest in deps
 
-```
-Handler = {"/", minirest:handler(#{modules => [rest_api_books]})},
-minirest:start_http(demo_rest_server, 8080, [], [Handler]).
-```
-
-## Stop the REST server
-
-```
-minirest:stop_http(demo_rest_server, 8080).
+```erlang
+{deps, [{minirest, {git, "https://github.com/emqx/minirest", {tag, "1.1.2"}}}]}.
 ```
 
-## License
+After add dep, rebar.config file should be like
+```erlang
+{erl_opts, [debug_info]}.
 
-Apache License Version 2.0
+{deps, [{minirest, {git, "https://github.com/emqx/minirest", {tag, "1.1.2"}}}]}.
 
-## Author
+{shell, [
+    {apps, [my_server]}
+]}.
+```
 
-Feng Lee <feng@emqx.io>
+## Write an API provider module, example.erl
 
+```erlang
+-module(example).
+
+-behavior(minirest_api).
+
+%% API
+-export([api_spec/0]).
+
+-export([hello/2]).
+
+api_spec() ->
+  {
+    [hello_api()],
+    []
+  }.
+
+hello_api() ->
+    MetaData = #{
+        get => #{
+            description => "hello world",
+            responses => #{
+            <<"200">> => #{
+                content => #{
+                    'application/json' => #{
+                        schema => #{
+                            type => object,
+                            properties => #{
+                                msg => #{
+                                    type => string}}}},
+                  'text/plain' => #{
+                        schema => #{
+                            type => string}}}}}}},
+  {"/hello", MetaData, hello}.
+
+hello(get, #{bindings := Bindins,
+             body := Body,
+             query_string := QueryString,
+             headers := Headers}) ->
+    Content = maps:get(<<"accept">>, Headers),
+    Body =
+        case Content of
+            <<"text/plain">> ->
+                <<"hello, minirest">>;
+             <<"application/json">> ->
+                #{msg => <<"hello minirest">>}
+        end,
+    {200, #{<<"content-type">> => Content},  Body}.
+
+
+% Supports callback functions for 2/3 parameters
+% The first parameter is Method
+% The second argument is the parsed parameters, including (bindings, query_string, headers, body)
+% The third argument is the request of cowboy
+-export([hello/3]).
+hello(Method, #{bindings := Bindins,
+                body := Body,
+                query_string := QueryString,
+                headers := Headers}, Request) ->
+    Content = maps:get(<<"accept">>, Headers),
+    Body =
+        case Content of
+            <<"text/plain">> ->
+                <<"hello, minirest">>;
+             <<"application/json">> ->
+                #{msg => <<"hello minirest">>}
+        end,
+    {200, #{<<"content-type">> => Content},  Body}.
+
+```
+
+## Start your HTTP server
+
+```erlang
+    ServerName = example_server,
+    App = my_server, %% or your app name
+    {ok, _} = application:ensure_all_started(minirest),
+    Options = #{
+        port => 8088,
+        apps => [App]
+    },
+    minirest:start(ServerName, Options).
+```
+
+## Now, Visit `http://localhost:8088/api-docs` and see what happened
+
+## Example
+
+See detail by example/my_server
+
+## TODO
+
+- Request filter
+
+    query & headers
+
+- Parameters check
+
+- Test suite
