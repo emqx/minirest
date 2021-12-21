@@ -77,7 +77,7 @@ do_read_body(Request, Params, Handler) ->
     case cowboy_req:has_body(Request) of
         true ->
             case minirest_body:parse(Request) of
-                {ok, {Body, NRequest}} ->
+                {ok, Body, NRequest} ->
                     do_filter(NRequest, Params#{body => Body}, Handler);
                 {response, Response} ->
                     Response

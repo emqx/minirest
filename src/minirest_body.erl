@@ -21,39 +21,32 @@
         ]).
 
 parse(Request) ->
-    parse(Request, decoder(Request)).
+    ContentType = cowboy_req:parse_header(<<"content-type">>, Request, undefined),
+    parse(ContentType, Request).
 
-parse(Request, Decoder) ->
-    Decoder(Request).
-
-decoder(Request) ->
-    case cowboy_req:parse_header(<<"content-type">>, Request, undefined) of
-        {<<"application">>, <<"json">>, _} ->
-            fun json_decoder/1;
-        {<<"multipart">>, <<"form-data">>, _} ->
-            fun forma_data_decoder/1;
-        _T ->
-            fun binary_decoder/1
-    end.
+parse({<<"application">>, <<"json">>, _}, Request) -> json_decoder(Request);
+parse({<<"multipart">>, <<"form-data">>, _}, Request) -> form_data_decoder(Request);
+parse({<<"application">>, <<"octet-stream">>, _}, Request) -> binary_decoder(Request);
+parse(_, Request) -> binary_decoder(Request).
 
 json_decoder(Request) ->
     {ok, Body, NRequest} = cowboy_req:read_body(Request),
     try
-        {ok, {jsx:decode(Body), NRequest}}
+        {ok, jsx:decode(Body), NRequest}
     catch _:_:_ ->
         Error = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
         {response, {?RESPONSE_CODE_BAD_REQUEST, Error}}
     end.
 
-forma_data_decoder(Request) ->
-    forma_data_decoder(Request, #{}).
+form_data_decoder(Request) ->
+    form_data_decoder(Request, #{}).
 
-forma_data_decoder(Request, Body) ->
+form_data_decoder(Request, Body) ->
     case loop_form(Request) of
         {done, NRequest} ->
-            {ok, {Body, NRequest}};
+            {ok, Body, NRequest};
         {Part, NRequest} ->
-            forma_data_decoder(NRequest, maps:merge(Body, Part))
+            form_data_decoder(NRequest, maps:merge(Body, Part))
     end.
 
 loop_form(Request) ->
@@ -72,5 +65,11 @@ loop_form(Request) ->
             {done, Request1}
     end.
 
-binary_decoder(Request) ->
-    cowboy_req:read_body(Request).
+binary_decoder(Req) ->
+    binary_decoder(Req, <<>>).
+
+binary_decoder(Req, Acc) ->
+    case cowboy_req:read_body(Req) of
+        {more, Bin, NewReq} -> binary_decoder(NewReq, <<Acc/binary, Bin/binary>>);
+        {ok, Bin, DoneReq} -> {ok, <<Acc/binary, Bin/binary>>, DoneReq}
+    end.
