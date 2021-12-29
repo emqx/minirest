@@ -104,7 +104,7 @@ binary_decoder(Request, Acc) ->
 %% encoder
 encoder({file, _}) ->
     fun file_encoder/1;
-encoder({file_binary, _}) ->
+encoder({file_binary, _, _}) ->
     fun file_binary_encoder/1;
 encoder(Body) when is_binary(Body) ->
     fun binary_encoder/1;
@@ -130,8 +130,7 @@ file_encoder({file, Path}) ->
     end.
 
 file_binary_encoder({file_binary, FileName, Binary}) ->
-    FileTypeContentTypeHeaders = file_content_type_headers(FileName),
-    {ok, FileTypeContentTypeHeaders, Binary}.
+    {ok, file_content_type_headers(FileName), Binary}.
 
 binary_encoder(Body) ->
     {ok, maps:merge(?DEFAULT_RESPONSE_HEADERS, #{<<"content-length">> => erlang:size(Body)}), Body}.
@@ -178,22 +177,13 @@ form_data_loop_encoder([Part | Tail], Boundary, Res) ->
     end.
 
 %% form-data file by path
-%% if part name is not specified, will use file name without extension
-form_data_part({file, Path}, Boundary) ->
-    case to_binary(Path) of
-        {error, PathError} ->
-            error_form_data_response({read_file, PathError});
-        PathBinary ->
-            KeyName = filename:basename(filename:rootname(PathBinary)),
-            form_data_part({file, KeyName, PathBinary}, Boundary)
-    end;
-form_data_part({file, KeyName, Path}, Boundary) ->
+form_data_part({Key, {file, Path}}, Boundary) ->
     case filelib:is_file(Path) andalso file:read_file_info(Path) of
         {ok, _} ->
             case file:read_file(Path) of
                 {ok, Binary} ->
                     FileName = filename:basename(Path),
-                    form_data_part({file_binary, KeyName, FileName, Binary}, Boundary);
+                    form_data_part({Key, {file_binary, FileName, Binary}}, Boundary);
                 {error, Reason} ->
                     error_form_data_response({read_file, {Path, Reason}})
             end;
@@ -204,27 +194,18 @@ form_data_part({file, KeyName, Path}, Boundary) ->
     end;
 
 %% form-data send file by binary
-%% if part name is not specified, will use file name without extension
-form_data_part({file_binary, FileName, FileBinary}, Boundary) ->
-    case to_binary(FileName) of
-        {error, FileNameError} ->
-            error_form_data_response({bad_file_part, FileNameError});
-        FileNameBinary ->
-            KeyName = filename:basename(filename:rootname(FileBinary)),
-            form_data_part({file_binary, KeyName, FileNameBinary, FileBinary}, Boundary)
-    end;
-form_data_part({file_binary, KeyName, FileName, FileBinary}, Boundary) ->
-    case {to_binary(KeyName), to_binary(FileName)} of
-        {{error, KeyNameError}, {error, FileNameError}} ->
-            error_form_data_response({bad_file_part, {KeyNameError, FileNameError}});
-        {{error, KeyNameError}, _} ->
-            error_form_data_response({bad_file_part, KeyNameError});
+form_data_part({Key, {file_binary, FileName, FileBinary}}, Boundary) ->
+    case {to_binary(Key), to_binary(FileName)} of
+        {{error, KeyError}, {error, FileNameError}} ->
+            error_form_data_response({bad_file_part, {KeyError, FileNameError}});
+        {{error, KeyError}, _} ->
+            error_form_data_response({bad_file_part, KeyError});
         {_, {error, FileNameError}} ->
             error_form_data_response({bad_file_part, FileNameError});
-        {KeyNameBinary, FileNameBinary} ->
+        {KeyBinary, FileNameBinary} ->
             Headers = [
                 {<<"Content-Disposition">>,
-                    <<"form-data; name=\"", KeyNameBinary/binary,
+                    <<"form-data; name=\"", KeyBinary/binary,
                         "\"; filename=\"", FileNameBinary/binary, "\"">>}
                 | file_content_type_headers(FileName, #{return_type => prop_list})],
             PartHeaders = cow_multipart:part(Boundary, Headers),
@@ -246,7 +227,10 @@ form_data_part({Key, Value}, Boundary) ->
                 {<<"content-type">>, <<"application/x-www-form-urlencoded">>}],
             PartHeaders = cow_multipart:part(Boundary, NHeaders),
             iolist_to_binary([PartHeaders, VBinary])
-    end.
+    end;
+
+form_data_part(NotSupport, _) ->
+    error_form_data_response({not_support, NotSupport}).
 
 %% file content type
 file_content_type_headers(Path) ->

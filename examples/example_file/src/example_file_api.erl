@@ -16,8 +16,6 @@
 
 -behaviour(minirest_api).
 
--export([start/0]).
-
 -export([api_spec/0]).
 
 -export([ upload_file/2
@@ -25,21 +23,6 @@
         , download_temporary_file/2
         , download_form_data_file/2
         ]).
-
-start() ->
-    application:ensure_all_started(minirest),
-    Ranch = #{
-        max_connections => 512,
-        num_acceptors => 4,
-        socket_opts => [ {send_timeout, 5000}
-                       , {port, 8088}
-                       , {backlog, 512}]},
-    Minirest = #{
-        modules => [?MODULE],
-        protocol => http,
-        swagger_global_spec =>
-            #{openapi => "3.0.0", info => #{title => "EMQ X Dashboard API", version => "5.0.0"}}},
-    minirest:start(?MODULE, Ranch, Minirest).
 
 api_spec() ->
     {
@@ -133,8 +116,7 @@ download_form_data_file(M, P) ->
         {key_int, 1},
         {key_float, 1.2},
         {key_boolean, true},
-        {file, FilePath},
-        {file, key_file, FilePath},
-        {file_binary, key_file_binary, FileName, Temporary}
+        {key_file, {file, FilePath}},
+        {key_file_binary, {file_binary, FileName, Temporary}}
     ],
     {200, {form_data, FormData}}.

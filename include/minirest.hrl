@@ -17,28 +17,39 @@
 
 -define(API_SPEC, api_spec).
 
--type path() :: string().
--type mete_data() :: map().
--type callback_function() :: atom().
+-type path()                :: string().
+-type mete_data()           :: map().
+-type callback_function()   :: atom().
 
--type api() :: {path(), mete_data(), callback_function()}.
--type apis() :: [api()].
+-type api()             :: {path(), mete_data(), callback_function()}.
+-type apis()            :: [api()].
 
--type api_schema() :: map().
--type api_schemas() :: [api_schema()].
+-type api_schema()      :: map().
+-type api_schemas()     :: [api_schema()].
 
--type api_spec() :: {apis(), api_schemas()}.
+-type api_spec()        :: {apis(), api_schemas()}.
 
--type http_method() :: get | post | put | head | delete | patch | options | connect | trace.
+-type http_method()     :: get | post | put | head | delete | patch | options | connect | trace.
 
--type status_code()     :: integer().
--type headers()         :: map()
+-type status_code()     ::   integer().
+-type headers()         ::   map()
                            | list().
+
+-type file_path()       :: binary() | string().
+-type file_name()       :: binary() | string().
+-type file_content()    :: binary().
+
+-type data_response_file() :: {file, file_path()} | {file_binary, file_name(), file_content()}.
+
+-type form_data_key()   :: atom() | binary() | string().
+-type form_data_value() :: atom() | binary() | string() | data_response_file().
+
+-type form_data_part()  :: {form_data_key(), form_data_value()}.
+
 -type response_body()   :: binary()
                            | jsx:json_term()
-                           | {form_data, map()
-                                         | list()}
-                           | {sendfile, Path :: binary()}.
+                           | data_response_file()
+                           | {form_data, [form_data_part()]}.
 
 -type error_code()      :: atom() | binary().
 -type error_message()   :: binary().
