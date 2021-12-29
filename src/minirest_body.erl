@@ -114,7 +114,7 @@ file_encoder({file, Path}) ->
     case filelib:is_file(Path) andalso file:read_file_info(Path) of
         {ok, #file_info{size = Size}} ->
             FileTypeContentTypeHeaders = file_content_type_headers(Path),
-            {ok, FileTypeContentTypeHeaders, {file, 0, Size, Path}};
+            {ok, FileTypeContentTypeHeaders, {sendfile, 0, Size, Path}};
         {error, Reason} ->
             Body = io_lib:format("mini rest file api bad return ~p", [Reason]),
             {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, #{<<"content-type">> => <<"text/plain">>}, Body};
@@ -171,14 +171,23 @@ form_data_loop_encoder([Part | Tail], Boundary, Res) ->
             form_data_loop_encoder(Tail, Boundary, [PartBinary | Res])
     end.
 
-%% form-data file
+%% form-data file by path
+%% if part name is not specified, will use file name without extension
 form_data_part({file, Path}, Boundary) ->
+    case to_binary(Path) of
+        {error, PathError} ->
+            error_form_data_response({read_file, PathError});
+        PathBinary ->
+            KeyName = filename:basename(filename:rootname(PathBinary)),
+            form_data_part({file, KeyName, PathBinary}, Boundary)
+    end;
+form_data_part({file, KeyName, Path}, Boundary) ->
     case filelib:is_file(Path) andalso file:read_file_info(Path) of
         {ok, _} ->
             case file:read_file(Path) of
                 {ok, Binary} ->
                     FileName = filename:basename(Path),
-                    form_data_part({file_binary, FileName, Binary}, Boundary);
+                    form_data_part({file_binary, KeyName, FileName, Binary}, Boundary);
                 {error, Reason} ->
                     error_form_data_response({read_file, {Path, Reason}})
             end;
@@ -187,14 +196,34 @@ form_data_part({file, Path}, Boundary) ->
         false ->
             error_form_data_response({bad_file, Path})
     end;
+
+%% form-data send file by binary
+%% if part name is not specified, will use file name without extension
 form_data_part({file_binary, FileName, FileBinary}, Boundary) ->
-    NameBinary = to_binary(FileName),
-    FileTypeHeaders = file_content_type_headers(FileName),
-    Headers0 = #{<<"Content-Disposition">> =>
-        <<"form-data; name=\"", NameBinary/binary, "\"; filename=\"", NameBinary/binary, "\"">>},
-    Headers = maps:merge(Headers0, FileTypeHeaders),
-    PartHeaders = cow_multipart:part(Boundary, Headers),
-    iolist_to_binary([PartHeaders, FileBinary]);
+    case to_binary(FileName) of
+        {error, FileNameError} ->
+            error_form_data_response({bad_file_part, FileNameError});
+        FileNameBinary ->
+            KeyName = filename:basename(filename:rootname(FileBinary)),
+            form_data_part({file_binary, KeyName, FileNameBinary, FileBinary}, Boundary)
+    end;
+form_data_part({file_binary, KeyName, FileName, FileBinary}, Boundary) ->
+    case {to_binary(KeyName), to_binary(FileName)} of
+        {{error, KeyNameError}, {error, FileNameError}} ->
+            error_form_data_response({bad_file_part, {KeyNameError, FileNameError}});
+        {{error, KeyNameError}, _} ->
+            error_form_data_response({bad_file_part, KeyNameError});
+        {_, {error, FileNameError}} ->
+            error_form_data_response({bad_file_part, FileNameError});
+        {KeyNameBinary, FileNameBinary} ->
+            Headers = [
+                {<<"Content-Disposition">>,
+                    <<"form-data; name=\"", KeyNameBinary/binary,
+                        "\"; filename=\"", FileNameBinary/binary, "\"">>}
+                | file_content_type_headers(FileName, #{return_type => prop_list})],
+            PartHeaders = cow_multipart:part(Boundary, Headers),
+            iolist_to_binary([PartHeaders, FileBinary])
+    end;
 
 %% key & value
 form_data_part({Key, Value}, Boundary) ->
@@ -206,22 +235,28 @@ form_data_part({Key, Value}, Boundary) ->
         {_, {error, {not_support, Value}}} ->
             error_form_data_response({bad_value, Value});
         {KBinary, VBinary} ->
-            NHeaders = #{
-                <<"content-disposition">> => <<"form-data; name=\"", KBinary/binary, "\"">>,
-                <<"content-type">> => <<"application/x-www-form-urlencoded">>
-            },
+            NHeaders = [
+                {<<"content-disposition">>, <<"form-data; name=\"", KBinary/binary, "\"">>},
+                {<<"content-type">>, <<"application/x-www-form-urlencoded">>}],
             PartHeaders = cow_multipart:part(Boundary, NHeaders),
             iolist_to_binary([PartHeaders, VBinary])
     end.
 
 %% file content type
 file_content_type_headers(Path) ->
+    file_content_type_headers(Path, #{return_type => map}).
+
+file_content_type_headers(Path, #{return_type := RT}) ->
     FileType = filename:extension(Path),
-    case maps:get(FileType, ?FILE_CONTENT_TYPE_MAP, undefined) of
-        undefined ->
+    case {maps:get(FileType, ?FILE_CONTENT_TYPE_MAP, undefined), RT} of
+        {undefined, map} ->
             #{};
-        Type ->
-            #{<<"content-type">> => Type}
+        {undefined, prop_list} ->
+            [];
+        {Type, map} ->
+            #{<<"content-type">> => Type};
+        {Type, prop_list} ->
+            [{<<"content-type">>, Type}]
     end.
 
 error_form_data_response(Data) ->
