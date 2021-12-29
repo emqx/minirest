@@ -26,7 +26,7 @@
 %%==============================================================================================
 %% parse
 -spec(parse(Request :: map()) ->
-            {ok, {Body :: map() | binary(), NRequest :: map()}} |
+            {ok, Body :: map() | binary(), NRequest :: map()} |
             {response, {?RESPONSE_CODE_BAD_REQUEST, ErrorMessage :: map()}}).
 parse(Request) ->
     parse(Request, decoder(Request)).
@@ -57,7 +57,7 @@ decoder(Request) ->
 json_decoder(Request) ->
     {ok, Body, NRequest} = cowboy_req:read_body(Request),
     try
-        {ok, {jsx:decode(Body), NRequest}}
+        {ok, jsx:decode(Body), NRequest}
     catch _:_:_ ->
         Error = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
         {response, {?RESPONSE_CODE_BAD_REQUEST, Error}}
@@ -69,7 +69,7 @@ forma_data_decoder(Request) ->
 forma_data_decoder(Request, Body) ->
     case loop_form(Request) of
         {done, NRequest} ->
-            {ok, {Body, NRequest}};
+            {ok, Body, NRequest};
         {Part, NRequest} ->
             forma_data_decoder(NRequest, maps:merge(Body, Part))
     end.
@@ -91,7 +91,13 @@ loop_form(Request) ->
     end.
 
 binary_decoder(Request) ->
-    cowboy_req:read_body(Request).
+    binary_decoder(Request, <<>>).
+
+binary_decoder(Request, Acc) ->
+    case cowboy_req:read_body(Request) of
+        {more, Bin, NewRequest} -> binary_decoder(NewRequest, <<Acc/binary, Bin/binary>>);
+        {ok, Bin, DoneRequest} -> {ok, <<Acc/binary, Bin/binary>>, DoneRequest}
+    end.
 
 %%==============================================================================================
 %% internal
