@@ -57,7 +57,8 @@ do_parse_params(Request, Handler) ->
     Params = #{
         bindings => cowboy_req:bindings(Request),
         query_string => maps:from_list(cowboy_req:parse_qs(Request)),
-        headers => cowboy_req:headers(Request)
+        headers => cowboy_req:headers(Request),
+        body => #{}
     },
     do_read_body(Request, Params, Handler).
 
