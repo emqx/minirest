@@ -61,6 +61,7 @@
         <<".config">>   =>    <<"application/octet-stream">>,
         <<".log">>      =>    <<"application/octet-stream">>,
         <<".json">>     =>    <<"application/json">>,
+        <<".zip">>     =>    <<"application/zip">>,
         <<".txt">>      =>    <<"text/plain">>,
         <<".gif">>      =>    <<"image/gif">>,
         <<".jpeg">>     =>    <<"image/jpeg">>
