@@ -22,18 +22,6 @@
 
 -include("minirest.hrl").
 
--include_lib("kernel/include/file.hrl").
-
--define(try_reply_json(BODY, REQ, EXPR),
-    case to_json(BODY) of
-        invalid_json_term ->
-            cowboy_req:reply(?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
-                #{<<"content-type">> => <<"text/plain">>},
-                list_to_binary(io_lib:format("invalid json term: ~p", [BODY])), REQ);
-        JSON ->
-            EXPR
-    end).
-
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
@@ -69,7 +57,8 @@ do_parse_params(Request, Handler) ->
     Params = #{
         bindings => cowboy_req:bindings(Request),
         query_string => maps:from_list(cowboy_req:parse_qs(Request)),
-        headers => cowboy_req:headers(Request)
+        headers => cowboy_req:headers(Request),
+        body => #{}
     },
     do_read_body(Request, Params, Handler).
 
@@ -77,7 +66,7 @@ do_read_body(Request, Params, Handler) ->
     case cowboy_req:has_body(Request) of
         true ->
             case minirest_body:parse(Request) of
-                {ok, {Body, NRequest}} ->
+                {ok, Body, NRequest} ->
                     do_filter(NRequest, Params#{body => Body}, Handler);
                 {response, Response} ->
                     Response
@@ -118,30 +107,7 @@ apply_callback(Request, Params, Handler) ->
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
-reply(StatusCode, Req) when is_integer(StatusCode) ->
-    cowboy_req:reply(StatusCode, Req);
-reply({StatusCode}, Req) ->
-    cowboy_req:reply(StatusCode, Req);
-
-reply({StatusCode, {sendfile, File}}, Req) ->
-    reply({StatusCode, {sendfile, File, []}}, Req);
-
-reply({StatusCode, {sendfile, File, Options}}, Req) ->
-    case file:read_file_info(File) of
-        {ok, #file_info{size = Size}} ->
-            cowboy_req:reply(StatusCode, #{}, {sendfile, 0, Size, File}, Req),
-            after_send_file(File, Options);
-        {error, Reason} ->
-            StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
-            Body = io_lib:format("mini rest file api bad return ~p", [Reason]),
-            cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req)
-    end;
-
-reply({StatusCode, Body0}, Req) ->
-    ?try_reply_json(Body0, Req,
-        cowboy_req:reply(StatusCode,
-            #{<<"content-type">> => <<"application/json">>}, JSON, Req));
-
+%% response error
 reply({ErrorStatus, Code, Message}, Req)
         when (ErrorStatus < 200 orelse ErrorStatus >= 300)
              andalso is_atom(Code)
@@ -149,33 +115,28 @@ reply({ErrorStatus, Code, Message}, Req)
     Body = #{code => Code, message => Message},
     reply({ErrorStatus, Body}, Req);
 
-reply({StatusCode, Headers, {sendfile, File}}, Req) ->
-    {ok, #file_info{size = Size}} = file:read_file_info(File),
-    cowboy_req:reply(StatusCode, Headers, {sendfile, 0, Size, File}, Req);
+reply(StatusCode, Req) when is_integer(StatusCode) ->
+    cowboy_req:reply(StatusCode, Req);
+reply({StatusCode}, Req) ->
+    cowboy_req:reply(StatusCode, Req);
+
+reply({StatusCode, Body0}, Req) ->
+    case minirest_body:encode(Body0) of
+        {ok, Headers, Body} ->
+            cowboy_req:reply(StatusCode, Headers, Body, Req);
+        {response, Response} ->
+            reply(Response, Req)
+    end;
 
 reply({StatusCode, Headers, Body0}, Req) ->
-    ?try_reply_json(Body0, Req,
-        cowboy_req:reply(StatusCode, Headers, JSON, Req));
+    case minirest_body:encode(Body0) of
+        {ok, Headers1, Body} ->
+            cowboy_req:reply(StatusCode, maps:merge(Headers, Headers1), Body, Req);
+        {response, Response} ->
+            reply(Response, Req)
+    end;
 
 reply(BadReturn, Req) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
     Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
-
-to_json(Data) when is_binary(Data) ->
-    Data;
-to_json(Data) ->
-    case jsx:is_term(Data) of
-        true ->
-            jsx:encode(Data);
-        false ->
-            invalid_json_term
-    end.
-
-after_send_file(File, Options) ->
-    case proplists:get_value(delete_after_send, Options, false) of
-        true ->
-            ok = file:delete(File);
-        false ->
-            ignore
-    end.

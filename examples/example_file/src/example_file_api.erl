@@ -16,31 +16,22 @@
 
 -behaviour(minirest_api).
 
--export([start/0]).
-
 -export([api_spec/0]).
 
 -export([ upload_file/2
-        , download_file/2]).
-
-start() ->
-    application:ensure_all_started(minirest),
-    Ranch = #{
-        max_connections => 512,
-        num_acceptors => 4,
-        socket_opts => [ {send_timeout, 5000}
-                       , {port, 8088}
-                       , {backlog, 512}]},
-    Minirest = #{
-        modules => [?MODULE],
-        protocol => http,
-        swagger_global_spec =>
-            #{openapi => "3.0.0", info => #{title => "EMQ X Dashboard API", version => "5.0.0"}}},
-    minirest:start(?MODULE, Ranch, Minirest).
+        , download_file/2
+        , download_temporary_file/2
+        , download_form_data_file/2
+        ]).
 
 api_spec() ->
     {
-        [file_upload_api(), file_download_api(), temporary_file_download_api()],
+        [
+        file_upload_api(),
+        file_download_api(),
+        temporary_file_download_api(),
+        form_data_file_download_api()
+        ],
         []
     }.
 
@@ -85,6 +76,15 @@ temporary_file_download_api() ->
                     content => #{}}}}},
     {"/file/temporary/download", MetaData, download_temporary_file}.
 
+form_data_file_download_api() ->
+    MetaData = #{
+        get => #{
+            description => "temporary file download, delete after send",
+            responses => #{
+                <<"200">> => #{
+                    content => #{}}}}},
+    {"/file/form_data/download", MetaData, download_form_data_file}.
+
 upload_file(M, P) ->
     io:format("method : ~p~n", [M]),
     io:format("req    : ~p~n", [P]),
@@ -95,13 +95,28 @@ download_file(M, P) ->
     io:format("req    : ~p~n", [P]),
     {ok, Path} = file:get_cwd(),
     File = Path ++ "/src/example_file_api.erl",
-    {200, {sendfile, File}}.
+    {200, {file, File}}.
 
-download_temporary_file() ->
+download_temporary_file(M, P) ->
     io:format("method : ~p~n", [M]),
     io:format("req    : ~p~n", [P]),
-    FileName = "temporary.txt",
-    ok = file:write(FileName, <<"hello">>),
+    FileName = <<"temporary.txt">>,
+    Temporary = <<"demo temporary data">>,
+    {200, {file_binary, FileName, Temporary}}.
+
+download_form_data_file(M, P) ->
+    io:format("method : ~p~n", [M]),
+    io:format("req    : ~p~n", [P]),
     {ok, Path} = file:get_cwd(),
-    File = Path ++ FileName,
-    {200, {sendfile, File, [{delete_after_send, true}]}}.
+    FilePath = Path ++ "/src/example_file_api.erl",
+    FileName = <<"temporary.txt">>,
+    Temporary = <<"demo temporary data">>,
+    FormData = [
+        {key, value},
+        {key_int, 1},
+        {key_float, 1.2},
+        {key_boolean, true},
+        {key_file, {file, FilePath}},
+        {key_file_binary, {file_binary, FileName, Temporary}}
+    ],
+    {200, {form_data, FormData}}.

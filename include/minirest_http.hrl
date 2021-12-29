@@ -52,3 +52,17 @@
 -define(RESPONSE_CODE_LOOP_DETECTED,                    508).
 -define(RESPONSE_CODE_NOT_EXTENDED,                     510).
 -define(RESPONSE_CODE_NETWORK_AUTHENTICATION_REQUIRED,  511).
+
+
+-define(DEFAULT_RESPONSE_HEADERS, #{<<"content-type">> => <<"application/json">>}).
+
+-define(FILE_CONTENT_TYPE_MAP, #{
+        <<".html">>     =>    <<"text/html">>,
+        <<".config">>   =>    <<"application/octet-stream">>,
+        <<".log">>      =>    <<"application/octet-stream">>,
+        <<".json">>     =>    <<"application/json">>,
+        <<".zip">>     =>    <<"application/zip">>,
+        <<".txt">>      =>    <<"text/plain">>,
+        <<".gif">>      =>    <<"image/gif">>,
+        <<".jpeg">>     =>    <<"image/jpeg">>
+    }).
