@@ -30,6 +30,8 @@
         , return_file/1
         ]).
 
+-export([do_cow_reply/4]).
+
 %% Cowboy callback
 -export([init/2]).
 
@@ -48,7 +50,6 @@
 %% Start/Stop Http
 %%------------------------------------------------------------------------------
 
--spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
     start_http(ServerName, Options, Handlers, undefined).
 start_http(ServerName, Options, Handlers, Middlewares) ->
@@ -66,7 +67,6 @@ start_http(ServerName, Options, Handlers, Middlewares) ->
     end,
     io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
 
--spec(start_https(atom(), list(), list()) -> {ok, pid()}).
 start_https(ServerName, Options, Handlers) ->
     start_https(ServerName, Options, Handlers, undefined).
 start_https(ServerName, Options, Handlers, Middlewares) ->
@@ -109,7 +109,6 @@ handlers(Handlers) ->
 %% Handler helper
 %%------------------------------------------------------------------------------
 
--spec(handler(minirest_handler:config()) -> handler()).
 handler(Config) -> minirest_handler:init(Config).
 
 %%------------------------------------------------------------------------------
@@ -130,7 +129,7 @@ handle_request(Req, Handlers) ->
                 internal_error(Req, Error, Stacktrace)
             end;
         not_found ->
-            cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
+            do_cow_reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
     end.
 
 match_handler(_Path, []) ->
@@ -148,20 +147,20 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := {Mod,
     case erlang:apply(Mod, Fun, [Req]) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
-            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+            do_cow_reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req);
         {error, {lock_user, ResponseBody}} ->
-            cowboy_req:reply(401, #{}, ResponseBody, Req)
+            do_cow_reply(401, #{}, ResponseBody, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
     case AuthFun(Req) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
-            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+            do_cow_reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req);
         {error, {lock_user, ResponseBody}} ->
-            cowboy_req:reply(401, #{}, ResponseBody, Req)
+            do_cow_reply(401, #{}, ResponseBody, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs}) ->
@@ -173,11 +172,22 @@ apply_handler(Req, Path, {M, F, Args}) ->
 internal_error(Req, Error, Stacktrace) ->
     error_logger:error_msg("~s ~s error: ~p, stacktrace:~n~p",
                            [cowboy_req:method(Req), cowboy_req:path(Req), Error, Stacktrace]),
-    cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
+    do_cow_reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
 
 %%------------------------------------------------------------------------------
 %% Return
 %%------------------------------------------------------------------------------
+do_cow_reply(Code, Headers, Body, Req) ->
+    cowboy_req:reply(Code, merge_default_headers(Headers), Body, Req).
+
+merge_default_headers(Headers) ->
+    DefaultHeaders = #{
+        <<"content-type">> => <<"application/json">>,
+        <<"x-frame-option">> => <<"DENY">>,
+        <<"x-content-type-options">> => <<"nosniff">>,
+        <<"x-xss-protection">> => <<"0">>
+    },
+    maps:merge(DefaultHeaders, Headers).
 
 return_file(File) ->
     {ok, #file_info{size = Size}} = file:read_file_info(File),
