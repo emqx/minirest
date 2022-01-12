@@ -185,7 +185,8 @@ merge_default_headers(Headers) ->
         <<"content-type">> => <<"application/json">>,
         <<"x-frame-option">> => <<"DENY">>,
         <<"x-content-type-options">> => <<"nosniff">>,
-        <<"x-xss-protection">> => <<"0">>
+        <<"x-xss-protection">> => <<"0">>,
+        <<"cache-control">> => <<"no-cache">>
     },
     maps:merge(DefaultHeaders, Headers).
 
