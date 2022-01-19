@@ -186,7 +186,7 @@ merge_default_headers(Headers) ->
         <<"x-frame-option">> => <<"DENY">>,
         <<"x-content-type-options">> => <<"nosniff">>,
         <<"x-xss-protection">> => <<"0">>,
-        <<"cache-control">> => <<"no-cache">>
+        <<"cache-control">> => <<"no-cache, no-store, must-revalidate">>
     },
     maps:merge(DefaultHeaders, Headers).
 
