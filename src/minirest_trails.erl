@@ -39,18 +39,18 @@ trails_schemas(Options, ModuleApiSpecList) ->
     Authorization = maps:get(authorization, Options, undefined),
     Fun =
         fun(ModuleApiSpec, {Trails, Schemas}) ->
-            {Trails0, Schemas0} = trails_schemas(BasePath, Authorization, ModuleApiSpec),
+            {Trails0, Schemas0} = do_trails_schemas(BasePath, Authorization, ModuleApiSpec),
             {lists:append(Trails, Trails0), lists:append(Schemas, Schemas0)}
         end,
     lists:foldl(Fun, {[], []}, ModuleApiSpecList).
 
-trails_schemas(BasePath, Authorization, {Module, {Apis, Schemas}}) ->
-    Trails = [trails_schemas(BasePath, Authorization, Module, Api) || Api <- Apis],
+do_trails_schemas(BasePath, Authorization, {Module, Apis, Schemas}) ->
+    Trails = [trails_api(BasePath, Authorization, Module, Api) || Api <- Apis],
     {Trails, Schemas}.
 
-trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
-    trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, #{}});
-trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
+trails_api(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
+    trails_api(BasePath, Authorization, Module, {Path, Metadata, Function, #{}});
+trails_api(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
     Fun =
         fun(Method, MethodDef, HandlerStates) ->
             HandlerState = #handler{
@@ -59,8 +59,9 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
                 module        = Module,
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
-                filter        = maps:get(filter, Options, undefined)
-                },
+                filter        = maps:get(filter, Options, undefined),
+                args          = maps:get(args, Options, [])
+            },
             maps:put(binary_method(Method), HandlerState, HandlerStates)
         end,
     HandlerStates = maps:fold(Fun, #{}, Metadata),
@@ -70,7 +71,7 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
 api_spec(Security, Module) ->
     try
         {Apis, Schemas} = erlang:apply(Module, ?API_SPEC, []),
-        {Module, {[generate_api(Security, Api) || Api <- Apis], Schemas}}
+        {Module, [generate_api(Security, Api) || Api <- Apis], Schemas}
     catch
         E:R:S ->
             erlang:raise(E, {minirest_trails_api_spec_error, R}, S)
