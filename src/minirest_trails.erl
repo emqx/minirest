@@ -89,21 +89,31 @@ generate_api(Security, Api = {Path, _MetaData, _Function, _Options}) ->
     generate_api_(Default, Api).
 
 generate_api_(Default, {Path, MetaData, Function, Options}) ->
-    {Path, maps:fold(
-               fun(Method, MethodDef0, NextMetaData) ->
-                   MethodDef =
-                       lists:foldl(
-                           fun(Key, NMethodDef) ->
-                               case maps:is_key(Key, NMethodDef) of
-                                   true ->
-                                       NMethodDef;
-                                   false ->
-                                       maps:put(Key, maps:get(Key, Default), NMethodDef)
-                               end
-                           end, MethodDef0, maps:keys(Default)),
-                   maps:put(Method, MethodDef, NextMetaData)
-               end,
-        #{}, MetaData), Function, Options}.
+    MergeDefFun =
+        fun(Method, MethodDef0, NextMetaData) ->
+            GenerateMethodDef = maps:merge(Default, decs_str_to_binary(MethodDef0)),
+            NextMetaData#{Method => GenerateMethodDef}
+        end,
+    {Path, maps:fold(MergeDefFun, #{}, MetaData), Function, Options}.
+
+decs_str_to_binary(Data = #{description := Desc}) when is_list(Desc) ->
+    decs_str_to_binary(Data#{description => list_to_binary(Desc)});
+decs_str_to_binary(Data) when is_map(Data) ->
+    Fun =
+        fun
+            (Key, Map, Res) when is_map(Map) ->
+                Res#{Key => decs_str_to_binary(Map)};
+            (oneOf, OneOf, Res) when is_list(OneOf) ->
+                Res#{oneOf => [decs_str_to_binary(One) || One <- OneOf]};
+            (parameters, Parameters, Res) ->
+                Res#{parameters => [decs_str_to_binary(Parameter) || Parameter <- Parameters]};
+            (_, _, Res) ->
+                Res
+        end,
+    maps:fold(Fun, Data, Data);
+decs_str_to_binary(Data) ->
+    Data.
+
 
 root_path(Path) ->
     case string:tokens(Path, "/") of

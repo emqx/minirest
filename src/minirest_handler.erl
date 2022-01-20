@@ -131,7 +131,7 @@ reply({StatusCode, Body0}, Req) ->
 reply({StatusCode, Headers, Body0}, Req) ->
     case minirest_body:encode(Body0) of
         {ok, Headers1, Body} ->
-            cowboy_req:reply(StatusCode, maps:merge(Headers, Headers1), Body, Req);
+            cowboy_req:reply(StatusCode, maps:merge(Headers1, Headers), Body, Req);
         {response, Response} ->
             reply(Response, Req)
     end;
