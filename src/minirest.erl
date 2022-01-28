@@ -72,31 +72,33 @@ start_listener(https, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_tls, Name, TransOpts, CowboyOptions).
 
 start_listener_(StartFunction, Name, TransOpts, CowboyOptions) ->
-    Port = get_port(TransOpts),
-    case erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]) of
-        {ok, Pid} ->
-            ?LOG(info, #{msg => "started_listener_ok",
-                         name => Name,
-                         port => Port,
-                         pid => Pid}),
-            {ok, Pid};
-        {error, Reason} ->
-            LogData =  #{msg => "failed_to_start_listener",
-                         port => Port,
-                         reason => Reason},
-            case Reason of
-                eaddrinuse ->
-                    ?LOG(error, LogData#{description => "the_port_is_in_use"});
-                _ ->
-                    ?LOG(error, LogData)
-            end,
-            error(Reason)
+    Res = erlang:apply(cowboy, StartFunction, [Name, TransOpts, CowboyOptions]),
+    log_start_result(Res, #{name => Name, port => get_port(TransOpts)}),
+    Res.
+
+-define(FAILED_MSG, "started_listener_failed").
+
+log_start_result({ok, Pid}, Log) ->
+    ?LOG(info, Log#{msg => "started_listener_ok", pid => Pid});
+log_start_result({error, eaddrinuse = Reason}, Log) ->
+    ?LOG(error, Log#{msg => ?FAILED_MSG, description => "the_port_is_in_use", reason => Reason});
+log_start_result({error, eacces = Reason}, Log) ->
+    ?LOG(error, Log#{msg => ?FAILED_MSG, description => "permission_denied", reason => Reason});
+log_start_result({error, no_cert = Reason}, Log) ->
+    ?LOG(error, Log#{msg => ?FAILED_MSG, description => "no_certificate_provided;", reason => Reason});
+%% copy from ranch.erl line:162
+log_start_result({error, {{shutdown, {failed_to_start_child, ranch_acceptors_sup,
+    {listen_error, _, Reason}}}, _}}, Log0) ->
+    Log = Log0#{msg => ?FAILED_MSG, reason => Reason},
+    case Reason of
+        eaddrnotavail -> ?LOG(error, Log#{description => "cannot_assign_requested_address"});
+        ebusy -> ?LOG(error, Log#{description => "file_busy"});
+        _ -> ?LOG(error, Log)
     end.
 
-get_port(L) when is_list(L) ->
-    proplists:get_value(port, L);
+get_port(L) when is_list(L) -> proplists:get_value(port, L);
 get_port(#{port := Port}) -> Port;
-get_port(#{socket_opts := #{port := Port}}) -> Port;
+get_port(#{socket_opts := SocketOpts}) -> proplists:get_value(port, SocketOpts);
 get_port(_) -> undefined.
 
 set_swagger_global_spec(Options) ->
