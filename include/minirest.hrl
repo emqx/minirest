@@ -65,6 +65,7 @@
     path            :: string(),
     module          :: atom(),
     function        :: atom(),
+    args            :: list(),
     filter          :: fun(),
     authorization   :: {Module :: atom(), Function :: atom()} | undefined
 }).

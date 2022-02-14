@@ -55,6 +55,7 @@ do_auth(Request, Handler) ->
 
 do_parse_params(Request, Handler) ->
     Params = #{
+        cowboy_req => Request,
         bindings => cowboy_req:bindings(Request),
         query_string => maps:from_list(cowboy_req:parse_qs(Request)),
         headers => cowboy_req:headers(Request),
@@ -67,36 +68,32 @@ do_read_body(Request, Params, Handler) ->
         true ->
             case minirest_body:parse(Request) of
                 {ok, Body, NRequest} ->
-                    do_filter(NRequest, Params#{body => Body}, Handler);
+                    do_filter(Params#{body => Body, cowboy_req => NRequest}, Handler);
                 {response, Response} ->
                     Response
             end;
         false ->
-            do_filter(Request, Params, Handler)
+            do_filter(Params, Handler)
     end.
 
-do_filter(Request, Params, #handler{filter = Filter,
-                                    path = Path,
-                                    module = Mod,
-                                    method = Method} = Handler) when is_function(Filter, 2) ->
+do_filter(Params, #handler{ filter = Filter,
+                            path = Path,
+                            module = Mod,
+                            method = Method} = Handler) when is_function(Filter, 2) ->
     case Filter(Params, #{path => Path, module => Mod, method => Method}) of
         {ok, NewParams} ->
-            apply_callback(Request, NewParams, Handler);
+            apply_callback(NewParams, Handler);
         Response ->
             Response
     end;
-do_filter(Request, Params, Handler) ->
-    apply_callback(Request, Params, Handler).
+do_filter(Params, Handler) ->
+    apply_callback(Params, Handler).
 
-apply_callback(Request, Params, Handler) ->
-    #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
+apply_callback(Params, Handler) ->
+    #handler{path = Path, method = Method, module = Mod, function = Fun, args = Args}
+        = Handler,
     try
-        Args =
-            case erlang:function_exported(Mod, Fun, 3) of
-                true -> [Method, Params, Request];
-                false -> [Method, Params]
-            end,
-        erlang:apply(Mod, Fun, Args)
+        erlang:apply(Mod, Fun, [Path, Method, Params] ++ Args)
     catch E:R:S ->
         ?LOG(warning, #{path => Path,
                         exception => E,
