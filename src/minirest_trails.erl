@@ -71,11 +71,17 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
 
 get_error_codes(#{responses := Responses}) ->
     Fun =
-        fun
-            (StatusCode, ResponseDef, Codes) when StatusCode < 200 orelse 300 =< StatusCode ->
-                lists:append(get_error_codes_(ResponseDef), Codes);
-            (_, _, Codes) ->
-                Codes
+        fun(StatusCode, ResponseDef, Codes) ->
+            case
+                (StatusCode < 200 orelse 300 =< StatusCode)
+                andalso
+                get_error_codes_(ResponseDef)
+            of
+                NewCodes when is_list(NewCodes) ->
+                    lists:append(NewCodes, Codes);
+                _ ->
+                    Codes
+            end
         end,
     maps:fold(Fun, [], Responses).
 
