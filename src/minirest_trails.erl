@@ -22,7 +22,7 @@
 -define(HANDLER, minirest_handler).
 
 trails_schemas(Options) ->
-    Modules = [minirest_info_api | maps:get(modules, Options, [])],
+    Modules = modules(Options),
     Name = maps:get(name, Options),
     Security = maps:get(security, Options, undefined),
     ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
@@ -32,6 +32,14 @@ trails_schemas(Options) ->
             {Trails0, Schemas};
         _ ->
             {Trails0 ++ trails:trails([{cowboy_swagger_handler, #{server => Name}}]), Schemas}
+    end.
+
+modules(Options) ->
+    case maps:get(swagger_support, Options, true) of
+        true ->
+            [minirest_info_api | maps:get(modules, Options, [])];
+        false ->
+            maps:get(modules, Options, [])
     end.
 
 trails_schemas(Options, ModuleApiSpecList) ->

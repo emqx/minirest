@@ -44,7 +44,7 @@ error_codes_api() ->
                             schema => #{
                                 type => array,
                                 schema => minirest:ref(minirest_api_error_codes)}}}}}}},
-    {"/error/codes", MetaData, error_codes}.
+    {"/info/error/codes", MetaData, error_codes}.
 
 error_codes(_, _) ->
     Body = #{codes => codes()},

@@ -16,8 +16,6 @@
 
 -export([init/2]).
 
-% -export([reply/2]).
-
 -include("minirest_http.hrl").
 
 -include("minirest.hrl").
