@@ -85,16 +85,19 @@ get_error_codes(#{responses := Responses}) ->
         end,
     maps:fold(Fun, [], Responses).
 
-get_error_codes_(ResponseDef) ->
+get_error_codes_(ResponseDef) when is_map(ResponseDef) ->
+    %% generate prop_list & map
+    get_error_codes_(jsx:encode(ResponseDef));
+get_error_codes_(ResponseDef) when is_binary(ResponseDef) ->
     KeyList = [
-        content,
-        'application/json',
-        schema,
-        properties,
-        code,
-        enum
+        <<"content">>,
+        <<"application/json">>,
+        <<"schema">>,
+        <<"properties">>,
+        <<"code">>,
+        <<"enum">>
     ],
-    get_error_codes_(KeyList, ResponseDef).
+    get_error_codes_(KeyList, jsx:decode(ResponseDef)).
 
 get_error_codes_([], _Data) ->
     undefined;
@@ -103,7 +106,7 @@ get_error_codes_([Key | Keys], Data) when is_map(Data)->
         undefined ->
             undefined;
         Codes when is_list(Codes) ->
-            Codes;
+            [binary_to_atom(Code) || Code <- Codes];
         Map when is_map(Map) ->
             get_error_codes_(Keys, Map)
     end;
