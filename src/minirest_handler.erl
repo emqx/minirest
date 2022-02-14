@@ -107,15 +107,15 @@ apply_callback(Request, Params, Handler) ->
 
 %% response error
 reply({ErrorStatus, #{code := Code, message := Message}}, Req, State)
-  when (ErrorStatus < 200 orelse ErrorStatus >= 300)
+  when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code)
   andalso is_binary(Message) ->
     reply({ErrorStatus, Code, Message}, Req, State);
 reply({ErrorStatus, Code, Message}, Req, State = #handler{error_codes = Codes})
-  when (ErrorStatus < 200 orelse ErrorStatus >= 300)
+  when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code)
   andalso is_binary(Message) ->
-    case lists:member(Code, Codes) of
+    case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
             Body = #{code => Code, message => Message},
             reply({ErrorStatus, Body}, Req, State);
@@ -155,3 +155,10 @@ reply(BadReturn, Req, _State) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
     Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
+
+maybe_ignore_code_check(401, _Code) -> true;
+maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
+maybe_ignore_code_check(400, <<"BAD_REQUEST">>) -> true;
+maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
+maybe_ignore_code_check(500, <<"INTERNAL_ERROR">>) -> true;
+maybe_ignore_code_check(_, _) -> false.
