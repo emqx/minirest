@@ -22,7 +22,7 @@
 -define(HANDLER, minirest_handler).
 
 trails_schemas(Options) ->
-    Modules = maps:get(modules, Options, []),
+    Modules = maps:get(modules, Options, []) ++ [minirest_info_api],
     Name = maps:get(name, Options),
     Security = maps:get(security, Options, undefined),
     ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
@@ -59,13 +59,40 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
                 module        = Module,
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
-                filter        = maps:get(filter, Options, undefined)
+                filter        = maps:get(filter, Options, undefined),
+                error_codes   = get_error_codes(MethodDef)
                 },
+            minirest_info_api:add_codes(get_error_codes(MethodDef)),
             maps:put(binary_method(Method), HandlerState, HandlerStates)
         end,
     HandlerStates = maps:fold(Fun, #{}, Metadata),
     CompletePath  = append_base_path(BasePath, Path),
     trails:trail(CompletePath, ?HANDLER, HandlerStates, Metadata).
+
+get_error_codes(MethodDef) ->
+    KeyList = [
+        content,
+        'application/json',
+        schema,
+        properties,
+        code,
+        enum
+    ],
+    get_error_codes(KeyList, MethodDef).
+
+get_error_codes([], _Data) ->
+    undefined;
+get_error_codes([Key | Keys], Data) when is_map(Data)->
+    case maps:get(Key, Data, undefined) of
+        undefined ->
+            undefined;
+        Codes when is_list(Codes) ->
+            Codes;
+        Map when is_map(Map) ->
+            get_error_codes(Keys, Map)
+    end;
+get_error_codes(_, _Data) ->
+    undefined.
 
 api_spec(Security, Module) ->
     try

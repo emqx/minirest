@@ -66,7 +66,8 @@
     module          :: atom(),
     function        :: atom(),
     filter          :: fun(),
-    authorization   :: {Module :: atom(), Function :: atom()} | undefined
+    authorization   :: {Module :: atom(), Function :: atom()} | undefined,
+    error_codes     :: list(error_code())
 }).
 
 -define(MFA, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY}).
