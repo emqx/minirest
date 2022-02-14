@@ -30,7 +30,7 @@
 api_spec() ->
     {
         [error_codes_api()],
-        [error_codes_schema([])]
+        []
     }.
 
 error_codes_api() ->
@@ -38,7 +38,7 @@ error_codes_api() ->
         get => #{
             description => "Minirest API Error Codes",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{
                         'application/json' => #{
                             schema => #{
@@ -67,7 +67,6 @@ add_codes([Code | Codes], NowCodes) ->
     end.
 
 set_codes(NewCodes) ->
-    lists:sort(NewCodes),
     case NewCodes == codes() of
         true ->
             {ok, NewCodes};
