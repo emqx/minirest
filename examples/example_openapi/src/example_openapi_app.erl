@@ -34,12 +34,15 @@ start(_StartType, _StartArgs) ->
     RanchOptions = #{
         max_connections => 512,
         num_acceptors => 4,
-        socket_opts => [ {send_timeout, 5000}
-                    , {port, 8088}
-                    , {backlog, 512}]},
+        socket_opts =>
+            [ {send_timeout, 5000}
+            , {port, 8088}
+            , {backlog, 512}
+        ]
+    },
     Minirest = #{
         base_path => BasePath,
-        modules => minirest_api:find_api_modules([?APP]),
+        modules => minirest_api:find_api_modules([example_openapi]),
         authorization => Authorization,
         security => [#{application => []}],
         swagger_global_spec => GlobalSpec,
@@ -47,7 +50,7 @@ start(_StartType, _StartArgs) ->
         protocol => http,
         ranch_options => RanchOptions
     },
-    minirest:start(?MODULE, Minirest)
+    minirest:start(?MODULE, Minirest),
     example_openapi_sup:start_link().
 
 stop(_State) ->
