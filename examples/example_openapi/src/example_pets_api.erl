@@ -128,56 +128,59 @@ pet_schema() ->
                 description => <<"Master name">>,
                 example => <<"Shawn">>}}}}.
 
-pets(post, Request) ->
-    {ok, Body, _} = cowboy_req:read_body(Request),
-    Pet = jsx:decode(Body, [return_maps]),
+pets(post, Params = #{body := Pet}) ->
     Name = maps:get(<<"name">>, Pet),
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:put(Name, Pet, Pets),
     persistent_term:put(pets, NPets),
-    {200};
+    Response = {200},
+    minirest:reply(Response, Params);
 
-pets(get, _Request) ->
+pets(get, Params) ->
     StatusCode = 200,
     Headers = #{<<"Content-Type">> => <<"application/json">>},
     Pets = persistent_term:get(pets, #{}),
     Body = jsx:encode(maps:values(Pets)),
-    {StatusCode, Headers, Body}.
+    Response = {StatusCode, Headers, Body},
+    minirest:reply(Response, Params).
 
-pet(put, Request) ->
-    {ok, Body, _} = cowboy_req:read_body(Request),
-    PetMaster = jsx:decode(Body, [return_maps]),
+pet(put, Params = #{body := PetMaster}) ->
     Name = maps:get(<<"name">>, PetMaster),
     NewMaster = maps:get(<<"master">>, PetMaster),
     Pets0 = persistent_term:get(pets, #{}),
-    case maps:get(Name, Pets0, no_found) of
-        no_found ->
-            {404};
-        Pet0 ->
-            Pet = maps:put(<<"master">>, NewMaster, Pet0),
-            Pets = maps:put(Name, Pet, Pets0),
-            persistent_term:put(pets, Pets),
-            {200, Pets}
-    end;
+    Response =
+        case maps:get(Name, Pets0, no_found) of
+            no_found ->
+                {404};
+            Pet0 ->
+                Pet = maps:put(<<"master">>, NewMaster, Pet0),
+                Pets = maps:put(Name, Pet, Pets0),
+                persistent_term:put(pets, Pets),
+                {200, Pets}
+        end,
+    minirest:reply(Response, Params);
 
-pet(get, Request) ->
+pet(get, Params = #{bindings := #{pet_name := PetName}}) ->
     PetName = cowboy_req:binding(pet_name, Request),
     Pets = persistent_term:get(pets, #{}),
-    case maps:get(PetName, Pets, no_found) of
-        no_found ->
-            {404};
-        Pet ->
-            Headers = #{<<"Content-Type">> => <<"application/json">>},
-            Body = jsx:encode(Pet),
-            {200, Headers, Body}
-    end;
+    Response =
+        case maps:get(PetName, Pets, no_found) of
+            no_found ->
+                {404};
+            Pet ->
+                Headers = #{<<"Content-Type">> => <<"application/json">>},
+                Body = jsx:encode(Pet),
+                {200, Headers, Body}
+        end,
+    minirest:reply(Response, Params);
 
-pet(delete, Request) ->
+pet(delete, Params = #{bindings := #{pet_name := PetName}}) ->
     PetName = cowboy_req:binding(pet_name, Request),
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:remove(PetName, Pets),
     persistent_term:put(pets, NPets),
-    {200}.
+    Response = 200,
+    minirest:reply(Response, Params).
 
 %%==============================================================================================
 %% internal

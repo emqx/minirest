@@ -17,6 +17,9 @@
 
 -define(API_SPEC, api_spec).
 
+-define(INTERNAL_STATE_KEY, '$minirest_handler_state').
+-define(REQUEST_KEY, request).
+
 -type path()                :: string().
 -type mete_data()           :: map().
 -type callback_function()   :: atom().

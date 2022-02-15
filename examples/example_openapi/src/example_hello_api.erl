@@ -46,7 +46,7 @@ hello_api() ->
                                 type => string}}}}}}},
     {"/hello", MetaData, hello}.
 
-hello(get, #{headers := Headers}) ->
+hello(get, Params = #{headers := Headers}) ->
     Content = maps:get(<<"accept">>, Headers),
     Body = case Content of
         <<"text/plain">> ->
@@ -54,5 +54,6 @@ hello(get, #{headers := Headers}) ->
         <<"application/json">> ->
             #{msg => <<"hello minirest">>}
     end,
-    {200, #{<<"content-type">> => Content},  Body}.
+    Response = {200, #{<<"content-type">> => Content},  Body},
+    minirest:reply(Response, Params).
 

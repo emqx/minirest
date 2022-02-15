@@ -19,6 +19,9 @@
         , stop/1
         , ref/1]).
 
+-export([ reply/2
+        ]).
+
 -include("minirest.hrl").
 
 start(Name, Options) ->
@@ -43,6 +46,9 @@ ref(Name) when is_atom(Name) ->
 
 ref(Name) ->
     cowboy_swagger:schema(Name).
+
+reply(Response, Params) ->
+    minirest_handler:reply(Response, Params).
 
 %%%==============================================================================================
 %% internal
@@ -103,7 +109,7 @@ get_port(_) -> undefined.
 
 set_swagger_global_spec(Options) ->
     DefaultGlobalSpec = #{
-        swagger => "2.0",
+        openapi => "3.0.0",
         info => #{title => "minirest API", version => " "}
     },
     GlobalSpec = maps:get(swagger_global_spec, Options, DefaultGlobalSpec),

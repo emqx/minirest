@@ -16,6 +16,8 @@
 
 -behavior(minirest_api).
 
+-dialyzer({nowarn_function, set_codes/1}).
+
 %% API Spec
 -export([ api_spec/0]).
 

@@ -16,15 +16,21 @@
 
 -export([init/2]).
 
+-export([reply/2]).
+
 -include("minirest_http.hrl").
 
 -include("minirest.hrl").
 
+reply(Response, Params) ->
+    Request = maps:get(?REQUEST_KEY, Params),
+    State = maps:get(?INTERNAL_STATE_KEY, Request),
+    do_reply(Response, Request, State).
+
 %%==============================================================================================
 %% cowboy callback init
-init(Request0, State)->
-    Response = handle(Request0, State),
-    Request = reply(Response, Request0, State),
+init(Request, State)->
+    handle(Request, State),
     {ok, Request, State}.
 
 %%%==============================================================================================
@@ -86,9 +92,15 @@ do_filter(Request, Params, #handler{filter = Filter,
 do_filter(Request, Params, Handler) ->
     apply_callback(Request, Params, Handler).
 
-apply_callback(Request, Params, Handler) ->
+apply_callback(Request, Params0, Handler) ->
     #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
     try
+        InternalParams =
+            #{
+                ?INTERNAL_STATE_KEY => Handler,
+                ?REQUEST_KEY => Request
+            },
+        Params = maps:merge(InternalParams, Params0),
         Args =
             case erlang:function_exported(Mod, Fun, 3) of
                 true -> [Method, Params, Request];
@@ -101,64 +113,62 @@ apply_callback(Request, Params, Handler) ->
                         reason => R,
                         stacktrace => S}),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
-        Body = #{code => <<"INTERNAL_ERROR">>, message => Message},
+        Body = #{code => 'INTERNAL_ERROR', message => Message},
         {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
     end.
 
 %% response error
-reply({ErrorStatus, #{code := Code, message := Message}}, Req, State)
+do_reply({ErrorStatus, #{code := Code, message := Message}}, Req, State)
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code)
   andalso is_binary(Message) ->
-    reply({ErrorStatus, Code, Message}, Req, State);
-reply({ErrorStatus, Code, Message}, Req, State = #handler{error_codes = Codes})
+    do_reply({ErrorStatus, Code, Message}, Req, State);
+do_reply({ErrorStatus, Code, Message}, Req, State = #handler{error_codes = Codes})
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code)
   andalso is_binary(Message) ->
     case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
             Body = #{code => Code, message => Message},
-            reply({ErrorStatus, Body}, Req, State);
+            do_reply({ErrorStatus, Body}, Req, State);
         false ->
             Message =
                 list_to_binary(
                     io_lib:format(
                         "not support code ~p, message ~p, schema def ~p", [Code, Message, Codes])),
-            Body = #{code => ?RESPONSE_CODE_INTERNAL_SERVER_ERROR, message => Message},
-            reply({500, Body}, Req, State)
+            Body = #{code => 'INTERNAL_ERROR', message => Message},
+            do_reply({500, Body}, Req, State)
     end;
 
 %% response simple
-reply(StatusCode, Req, _State) when is_integer(StatusCode) ->
+do_reply(StatusCode, Req, _State) when is_integer(StatusCode) ->
     cowboy_req:reply(StatusCode, Req);
 
-reply({StatusCode}, Req, _State) ->
+do_reply({StatusCode}, Req, _State) ->
     cowboy_req:reply(StatusCode, Req);
 
-reply({StatusCode, Body0}, Req, State) ->
+do_reply({StatusCode, Body0}, Req, State) ->
     case minirest_body:encode(Body0) of
         {ok, Headers, Body} ->
             cowboy_req:reply(StatusCode, Headers, Body, Req);
         {response, Response} ->
-            reply(Response, Req, State)
+            do_reply(Response, Req, State)
     end;
 
-reply({StatusCode, Headers, Body0}, Req, State) ->
+do_reply({StatusCode, Headers, Body0}, Req, State) ->
     case minirest_body:encode(Body0) of
         {ok, Headers1, Body} ->
             cowboy_req:reply(StatusCode, maps:merge(Headers1, Headers), Body, Req);
         {response, Response} ->
-            reply(Response, Req, State)
+            do_reply(Response, Req, State)
     end;
 
-reply(BadReturn, Req, _State) ->
+do_reply(BadReturn, Req, _State) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
     Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
 
 maybe_ignore_code_check(401, _Code) -> true;
 maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
-maybe_ignore_code_check(400, <<"BAD_REQUEST">>) -> true;
 maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
-maybe_ignore_code_check(500, <<"INTERNAL_ERROR">>) -> true;
 maybe_ignore_code_check(_, _) -> false.

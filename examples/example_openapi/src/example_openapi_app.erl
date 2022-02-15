@@ -19,9 +19,13 @@ start(_StartType, _StartArgs) ->
     Authorization = {?MODULE, authorize_appid},
     RanchOptions = #{port => 8088},
     BasePath = "/minirest/example/openapi",
+    Dispatch = [
+        {"/", cowboy_static, {priv_file, ?APP, "www/index.html"}},
+        {"/static/[...]", cowboy_static, {priv_dir, ?APP, "www/static"}}
+    ],
     GlobalSpec = #{
         openapi => "3.0.0",
-        info => #{title => "EMQ X API", version => "5.0.0"},
+        info => #{title => "Minirest Demo API", version => "1.0"},
         servers => [#{url => BasePath}],
         components => #{
             schemas => #{},
@@ -32,10 +36,12 @@ start(_StartType, _StartArgs) ->
                     in => header}}}},
     Minirest = #{
         base_path => BasePath,
-        modules => [example_hello_api],
+        modules => minirest_api:find_api_modules([example_openapi]),
         authorization => Authorization,
         security => [#{application => []}],
-        swagger_global_spec => GlobalSpec},
+        swagger_global_spec => GlobalSpec,
+        dispatch => Dispatch
+    },
     MinirestOptions = maps:merge(Minirest, RanchOptions),
     minirest:start(?MODULE, MinirestOptions),
     example_openapi_sup:start_link().
