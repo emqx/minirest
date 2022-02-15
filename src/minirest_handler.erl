@@ -16,33 +16,36 @@
 
 -export([init/2]).
 
--export([reply/2]).
-
 -include("minirest_http.hrl").
 
 -include("minirest.hrl").
 
-reply(Response, Params) ->
-    Request = maps:get(?REQUEST_KEY, Params),
-    State = maps:get(?INTERNAL_STATE_KEY, Request),
-    do_reply(Response, Request, State).
-
 %%==============================================================================================
 %% cowboy callback init
-init(Request, State)->
-    handle(Request, State),
+init(Request0, State)->
+    {Response, Handler} = handle(Request0, State),
+    Request = reply(Response, Request0, Handler),
     {ok, Request, State}.
 
 %%%==============================================================================================
 %% internal
 handle(Request, State) ->
     Method = cowboy_req:method(Request),
-    case maps:get(Method, State, undefined) of
-        undefined ->
-            {?RESPONSE_CODE_METHOD_NOT_ALLOWED, #{<<"allow">> => [maps:keys(State)]}, <<"">>};
-        Handler ->
-            do_auth(Request, Handler)
-    end.
+    Handler = maps:get(Method, State, maps:keys(State)),
+    {do_handle(Request, Handler), Handler}.
+
+do_handle(_Request, Allow) when is_list(Allow) ->
+    {?RESPONSE_CODE_METHOD_NOT_ALLOWED, allow_method_header(Allow), <<"">>};
+do_handle(Request, Handler) ->
+    do_auth(Request, Handler).
+
+allow_method_header(Allow) ->
+    #{<<"allow">> => trans_allow(Allow, <<"">>)}.
+
+trans_allow([], Res) -> Res;
+trans_allow([Method], Res) -> <<Res/binary, Method/binary>>;
+trans_allow([Method | Allow], Res) ->
+    trans_allow(Allow, <<Res/binary, Method/binary, ", ">>).
 
 do_auth(Request, Handler = #handler{authorization = {M, F}}) ->
     case erlang:apply(M, F, [Request]) of
@@ -92,15 +95,9 @@ do_filter(Request, Params, #handler{filter = Filter,
 do_filter(Request, Params, Handler) ->
     apply_callback(Request, Params, Handler).
 
-apply_callback(Request, Params0, Handler) ->
+apply_callback(Request, Params, Handler) ->
     #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
     try
-        InternalParams =
-            #{
-                ?INTERNAL_STATE_KEY => Handler,
-                ?REQUEST_KEY => Request
-            },
-        Params = maps:merge(InternalParams, Params0),
         Args =
             case erlang:function_exported(Mod, Fun, 3) of
                 true -> [Method, Params, Request];
@@ -118,52 +115,52 @@ apply_callback(Request, Params0, Handler) ->
     end.
 
 %% response error
-do_reply({ErrorStatus, #{code := Code, message := Message}}, Req, State)
+reply({ErrorStatus, #{code := Code, message := Message}}, Req, Handler)
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code)
   andalso is_binary(Message) ->
-    do_reply({ErrorStatus, Code, Message}, Req, State);
-do_reply({ErrorStatus, Code, Message}, Req, State = #handler{error_codes = Codes})
+    reply({ErrorStatus, Code, Message}, Req, Handler);
+reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes})
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code)
   andalso is_binary(Message) ->
     case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
             Body = #{code => Code, message => Message},
-            do_reply({ErrorStatus, Body}, Req, State);
+            reply({ErrorStatus, Body}, Req, Handler);
         false ->
             Message =
                 list_to_binary(
                     io_lib:format(
                         "not support code ~p, message ~p, schema def ~p", [Code, Message, Codes])),
             Body = #{code => 'INTERNAL_ERROR', message => Message},
-            do_reply({500, Body}, Req, State)
+            reply({500, Body}, Req, Handler)
     end;
 
 %% response simple
-do_reply(StatusCode, Req, _State) when is_integer(StatusCode) ->
+reply(StatusCode, Req, _Handler) when is_integer(StatusCode) ->
     cowboy_req:reply(StatusCode, Req);
 
-do_reply({StatusCode}, Req, _State) ->
+reply({StatusCode}, Req, _Handler) ->
     cowboy_req:reply(StatusCode, Req);
 
-do_reply({StatusCode, Body0}, Req, State) ->
+reply({StatusCode, Body0}, Req, Handler) ->
     case minirest_body:encode(Body0) of
         {ok, Headers, Body} ->
             cowboy_req:reply(StatusCode, Headers, Body, Req);
         {response, Response} ->
-            do_reply(Response, Req, State)
+            reply(Response, Req, Handler)
     end;
 
-do_reply({StatusCode, Headers, Body0}, Req, State) ->
+reply({StatusCode, Headers, Body0}, Req, Handler) ->
     case minirest_body:encode(Body0) of
         {ok, Headers1, Body} ->
             cowboy_req:reply(StatusCode, maps:merge(Headers1, Headers), Body, Req);
         {response, Response} ->
-            do_reply(Response, Req, State)
+            reply(Response, Req, Handler)
     end;
 
-do_reply(BadReturn, Req, _State) ->
+reply(BadReturn, Req, _Handler) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
     Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).

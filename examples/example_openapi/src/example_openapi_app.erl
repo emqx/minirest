@@ -12,17 +12,10 @@
 
 -define(APP, example_openapi).
 
-
-
 start(_StartType, _StartArgs) ->
     {ok, _} = application:ensure_all_started(minirest),
-    Authorization = {?MODULE, authorize_appid},
-    RanchOptions = #{port => 8088},
     BasePath = "/minirest/example/openapi",
-    Dispatch = [
-        {"/", cowboy_static, {priv_file, ?APP, "www/index.html"}},
-        {"/static/[...]", cowboy_static, {priv_dir, ?APP, "www/static"}}
-    ],
+    Authorization = {?MODULE, authorize_appid},
     GlobalSpec = #{
         openapi => "3.0.0",
         info => #{title => "Minirest Demo API", version => "1.0"},
@@ -34,16 +27,27 @@ start(_StartType, _StartArgs) ->
                     type => apiKey,
                     name => "authorization",
                     in => header}}}},
+    Dispatch = [
+        {"/", cowboy_static, {priv_file, ?APP, "www/index.html"}},
+        {"/static/[...]", cowboy_static, {priv_dir, ?APP, "www/static"}}
+    ],
+    RanchOptions = #{
+        max_connections => 512,
+        num_acceptors => 4,
+        socket_opts => [ {send_timeout, 5000}
+                    , {port, 8088}
+                    , {backlog, 512}]},
     Minirest = #{
         base_path => BasePath,
-        modules => minirest_api:find_api_modules([example_openapi]),
+        modules => minirest_api:find_api_modules([?APP]),
         authorization => Authorization,
         security => [#{application => []}],
         swagger_global_spec => GlobalSpec,
-        dispatch => Dispatch
+        dispatch => Dispatch,
+        protocol => http,
+        ranch_options => RanchOptions
     },
-    MinirestOptions = maps:merge(Minirest, RanchOptions),
-    minirest:start(?MODULE, MinirestOptions),
+    minirest:start(?MODULE, Minirest)
     example_openapi_sup:start_link().
 
 stop(_State) ->

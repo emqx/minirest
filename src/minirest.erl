@@ -19,9 +19,6 @@
         , stop/1
         , ref/1]).
 
--export([ reply/2
-        ]).
-
 -include("minirest.hrl").
 
 start(Name, Options) ->
@@ -46,9 +43,6 @@ ref(Name) when is_atom(Name) ->
 
 ref(Name) ->
     cowboy_swagger:schema(Name).
-
-reply(Response, Params) ->
-    minirest_handler:reply(Response, Params).
 
 %%%==============================================================================================
 %% internal
