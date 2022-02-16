@@ -12,6 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+%% TODO: maybe remove this api after code run-time check
 -module(minirest_info_api).
 
 -behavior(minirest_api).

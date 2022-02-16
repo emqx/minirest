@@ -156,7 +156,7 @@ pet(put, #{body := PetMaster}) ->
             {200, Pets}
     end;
 
-pet(get, Params = #{bindings := #{pet_name := PetName}}) ->
+pet(get, #{bindings := #{pet_name := PetName}}) ->
     Pets = persistent_term:get(pets, #{}),
     case maps:get(PetName, Pets, no_found) of
         no_found ->
@@ -167,7 +167,7 @@ pet(get, Params = #{bindings := #{pet_name := PetName}}) ->
             {200, Headers, Body}
     end;
 
-pet(delete, Params = #{bindings := #{pet_name := PetName}}) ->
+pet(delete, #{bindings := #{pet_name := PetName}}) ->
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:remove(PetName, Pets),
     persistent_term:put(pets, NPets),
