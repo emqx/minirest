@@ -33,7 +33,7 @@ hello_api() ->
         get => #{
             description => "hello world",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{
                         'application/json' => #{
                             schema => #{
@@ -47,12 +47,12 @@ hello_api() ->
     {"/hello", MetaData, hello}.
 
 hello(get, #{headers := Headers}) ->
-    Content = maps:get(<<"accept">>, Headers),
+    Content = maps:get(<<"accept">>, Headers, <<"text/plain">>),
     Body = case Content of
         <<"text/plain">> ->
             <<"hello, minirest">>;
         <<"application/json">> ->
             #{msg => <<"hello minirest">>}
     end,
-    {200, #{<<"content-type">> => Content},  Body}.
+    {200, #{<<"content-type">> => Content}, Body}.
 

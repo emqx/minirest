@@ -22,7 +22,7 @@
 -define(HANDLER, minirest_handler).
 
 trails_schemas(Options) ->
-    Modules = maps:get(modules, Options, []),
+    Modules = modules(Options),
     Name = maps:get(name, Options),
     Security = maps:get(security, Options, undefined),
     ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
@@ -32,6 +32,15 @@ trails_schemas(Options) ->
             {Trails0, Schemas};
         _ ->
             {Trails0 ++ trails:trails([{cowboy_swagger_handler, #{server => Name}}]), Schemas}
+    end.
+
+modules(Options) ->
+    Modules = maps:get(modules, Options, []),
+    case maps:get(server_info_api, Options, false) of
+        true ->
+            [minirest_info_api | Modules];
+        false ->
+            Modules
     end.
 
 trails_schemas(Options, ModuleApiSpecList) ->
@@ -59,13 +68,59 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
                 module        = Module,
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
-                filter        = maps:get(filter, Options, undefined)
+                filter        = maps:get(filter, Options, undefined),
+                error_codes   = get_error_codes(MethodDef)
                 },
+            minirest_info_api:add_codes(get_error_codes(MethodDef)),
             maps:put(binary_method(Method), HandlerState, HandlerStates)
         end,
     HandlerStates = maps:fold(Fun, #{}, Metadata),
     CompletePath  = append_base_path(BasePath, Path),
     trails:trail(CompletePath, ?HANDLER, HandlerStates, Metadata).
+
+get_error_codes(#{responses := Responses}) ->
+    Fun =
+        fun(StatusCode, ResponseDef, Codes) ->
+            case
+                (StatusCode < 200 orelse 300 =< StatusCode)
+                andalso
+                get_error_codes_(ResponseDef)
+            of
+                NewCodes when is_list(NewCodes) ->
+                    lists:append(NewCodes, Codes);
+                _ ->
+                    Codes
+            end
+        end,
+    maps:fold(Fun, [], Responses).
+
+get_error_codes_(ResponseDef) when is_map(ResponseDef) ->
+    %% generate prop_list & map
+    get_error_codes_(jsx:encode(ResponseDef));
+get_error_codes_(ResponseDef) when is_binary(ResponseDef) ->
+    KeyList = [
+        <<"content">>,
+        <<"application/json">>,
+        <<"schema">>,
+        <<"properties">>,
+        <<"code">>,
+        <<"enum">>
+    ],
+    get_error_codes_(KeyList, jsx:decode(ResponseDef)).
+
+get_error_codes_([], _Data) ->
+    undefined;
+get_error_codes_([Key | Keys], Data) when is_map(Data)->
+    case maps:get(Key, Data, undefined) of
+        undefined ->
+            undefined;
+        Codes when is_list(Codes) ->
+            [binary_to_atom(Code) || Code <- Codes];
+        Map when is_map(Map) ->
+            get_error_codes_(Keys, Map)
+    end;
+get_error_codes_(_, _Data) ->
+    undefined.
 
 api_spec(Security, Module) ->
     try

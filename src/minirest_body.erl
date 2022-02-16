@@ -57,7 +57,7 @@ decoder(Request) ->
 json_decoder(Request) ->
     {ok, Body, NRequest} = cowboy_req:read_body(Request),
     try
-        {ok, jsx:decode(Body), NRequest}
+        {ok, jsx:decode(Body, [return_maps]), NRequest}
     catch _:_:_ ->
         Error = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
         {response, {?RESPONSE_CODE_BAD_REQUEST, Error}}

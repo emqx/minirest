@@ -37,11 +37,11 @@ pets_api() ->
                     'application/json' => #{
                         schema => minirest:ref(<<"pet">>)}}},
             responses => #{
-                <<"200">> => #{description => "new pet"}}},
+                200 => #{description => "new pet"}}},
         get => #{
             description => "list pets",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{
                         'application/json' => #{
                             schema => #{
@@ -101,12 +101,12 @@ pets_name_api() ->
                                     type => string,
                                     example => <<"Calorie">>}}}}}},
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     description => "get a new master ok",
                     content => #{
                         'application/json' => #{
                             schema => minirest:ref(<<"pet">>)}}},
-                <<"404">> => #{
+                404 => #{
                     description => "pet name not found"}}}},
     {Path, Metadata, pet}.
 
@@ -128,25 +128,21 @@ pet_schema() ->
                 description => <<"Master name">>,
                 example => <<"Shawn">>}}}}.
 
-pets(post, Request) ->
-    {ok, Body, _} = cowboy_req:read_body(Request),
-    Pet = jsx:decode(Body, [return_maps]),
+pets(post, #{body := Pet}) ->
     Name = maps:get(<<"name">>, Pet),
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:put(Name, Pet, Pets),
     persistent_term:put(pets, NPets),
-    {200};
+    {200, NPets};
 
-pets(get, _Request) ->
+pets(get, _Params) ->
     StatusCode = 200,
     Headers = #{<<"Content-Type">> => <<"application/json">>},
     Pets = persistent_term:get(pets, #{}),
     Body = jsx:encode(maps:values(Pets)),
     {StatusCode, Headers, Body}.
 
-pet(put, Request) ->
-    {ok, Body, _} = cowboy_req:read_body(Request),
-    PetMaster = jsx:decode(Body, [return_maps]),
+pet(put, #{body := PetMaster}) ->
     Name = maps:get(<<"name">>, PetMaster),
     NewMaster = maps:get(<<"master">>, PetMaster),
     Pets0 = persistent_term:get(pets, #{}),
@@ -160,8 +156,7 @@ pet(put, Request) ->
             {200, Pets}
     end;
 
-pet(get, Request) ->
-    PetName = cowboy_req:binding(pet_name, Request),
+pet(get, #{bindings := #{pet_name := PetName}}) ->
     Pets = persistent_term:get(pets, #{}),
     case maps:get(PetName, Pets, no_found) of
         no_found ->
@@ -172,12 +167,11 @@ pet(get, Request) ->
             {200, Headers, Body}
     end;
 
-pet(delete, Request) ->
-    PetName = cowboy_req:binding(pet_name, Request),
+pet(delete, #{bindings := #{pet_name := PetName}}) ->
     Pets = persistent_term:get(pets, #{}),
     NPets = maps:remove(PetName, Pets),
     persistent_term:put(pets, NPets),
-    {200}.
+    200.
 
 %%==============================================================================================
 %% internal

@@ -13,7 +13,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%--------------------------------------------------------------------
--module(example).
+-module(example_crash_api).
 
 -behavior(minirest_api).
 
@@ -31,9 +31,9 @@ api_spec() ->
 hello_api() ->
     MetaData = #{
         get => #{
-            description => "hello world",
+            description => "Crash API For 500 Test",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{
                         'application/json' => #{
                             schema => #{
@@ -44,15 +44,10 @@ hello_api() ->
                         'text/plain' => #{
                             schema => #{
                                 type => string}}}}}}},
-    {"/hello", MetaData, hello}.
+    {"/crash", MetaData, hello}.
 
-hello(get, #{headers := Headers}) ->
-    Content = maps:get(<<"accept">>, Headers),
-    Body =
-        case Content of
-            <<"text/plain">> ->
-                <<"hello, minirest">>;
-            <<"application/json">> ->
-                #{msg => <<"hello minirest">>}
-        end,
-    {200, #{<<"content-type">> => Content},  Body}.
+hello(_, _Params) ->
+    %% let it crash for 500 return test
+    1 = 2,
+    {200, ok}.
+

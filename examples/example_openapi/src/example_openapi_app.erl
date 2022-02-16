@@ -12,16 +12,13 @@
 
 -define(APP, example_openapi).
 
-
-
 start(_StartType, _StartArgs) ->
     {ok, _} = application:ensure_all_started(minirest),
-    Authorization = {?MODULE, authorize_appid},
-    RanchOptions = #{port => 8088},
     BasePath = "/minirest/example/openapi",
+    Authorization = {?MODULE, authorize_appid},
     GlobalSpec = #{
         openapi => "3.0.0",
-        info => #{title => "EMQ X API", version => "5.0.0"},
+        info => #{title => "Minirest Demo API", version => "1.0"},
         servers => [#{url => BasePath}],
         components => #{
             schemas => #{},
@@ -30,14 +27,30 @@ start(_StartType, _StartArgs) ->
                     type => apiKey,
                     name => "authorization",
                     in => header}}}},
+    Dispatch = [
+        {"/", cowboy_static, {priv_file, ?APP, "www/index.html"}},
+        {"/static/[...]", cowboy_static, {priv_dir, ?APP, "www/static"}}
+    ],
+    RanchOptions = #{
+        max_connections => 512,
+        num_acceptors => 4,
+        socket_opts =>
+            [ {send_timeout, 5000}
+            , {port, 8088}
+            , {backlog, 512}
+        ]
+    },
     Minirest = #{
         base_path => BasePath,
-        modules => [example_hello_api],
+        modules => minirest_api:find_api_modules([example_openapi]),
         authorization => Authorization,
         security => [#{application => []}],
-        swagger_global_spec => GlobalSpec},
-    MinirestOptions = maps:merge(Minirest, RanchOptions),
-    minirest:start(?MODULE, MinirestOptions),
+        swagger_global_spec => GlobalSpec,
+        dispatch => Dispatch,
+        protocol => http,
+        ranch_options => RanchOptions
+    },
+    minirest:start(?MODULE, Minirest),
     example_openapi_sup:start_link().
 
 stop(_State) ->

@@ -54,7 +54,7 @@ file_upload_api() ->
                             sshKey => #{
                                 'contentType' => 'text/plain'}}}}},
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{}}}}},
     {"/file/upload", MetaData, upload_file}.
 
@@ -63,7 +63,7 @@ file_download_api() ->
         get => #{
             description => "file download",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{}}}}},
     {"/file/download", MetaData, download_file}.
 
@@ -72,7 +72,7 @@ temporary_file_download_api() ->
         get => #{
             description => "temporary file download, delete after send",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{}}}}},
     {"/file/temporary/download", MetaData, download_temporary_file}.
 
@@ -81,7 +81,7 @@ form_data_file_download_api() ->
         get => #{
             description => "temporary file download, delete after send",
             responses => #{
-                <<"200">> => #{
+                200 => #{
                     content => #{}}}}},
     {"/file/form_data/download", MetaData, download_form_data_file}.
 
