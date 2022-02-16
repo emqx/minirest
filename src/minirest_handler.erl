@@ -31,13 +31,13 @@ init(Request0, State)->
 %% internal
 handle(Request, State) ->
     Method = cowboy_req:method(Request),
-    Handler = maps:get(Method, State, maps:keys(State)),
-    {do_handle(Request, Handler), Handler}.
-
-do_handle(_Request, Allow) when is_list(Allow) ->
-    {?RESPONSE_CODE_METHOD_NOT_ALLOWED, allow_method_header(Allow), <<"">>};
-do_handle(Request, Handler) ->
-    do_auth(Request, Handler).
+    case maps:find(Method, State) of
+        error ->
+            Headers = allow_method_header(maps:keys(State)),
+            {?RESPONSE_CODE_METHOD_NOT_ALLOWED, Headers, <<"">>};
+        {ok, Handler} ->
+            {do_auth(Request, Handler), Handler}
+    end.
 
 allow_method_header(Allow) ->
     #{<<"allow">> => trans_allow(Allow, <<"">>)}.
@@ -110,8 +110,7 @@ apply_callback(Request, Params, Handler) ->
                         reason => R,
                         stacktrace => S}),
         Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
-        Body = #{code => 'INTERNAL_ERROR', message => Message},
-        {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, Body}
+        {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, 'INTERNAL_ERROR', Message}
     end.
 
 %% response error
@@ -126,15 +125,14 @@ reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes}
   andalso is_binary(Message) ->
     case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
-            Body = #{code => Code, message => Message},
-            reply({ErrorStatus, Body}, Req, Handler);
+            {ok, Headers, Body} = minirest_body:encode(#{code => Code, message => Message}),
+            reply({ErrorStatus, Headers, Body}, Req, Handler);
         false ->
             Message =
                 list_to_binary(
                     io_lib:format(
                         "not support code ~p, message ~p, schema def ~p", [Code, Message, Codes])),
-            Body = #{code => 'INTERNAL_ERROR', message => Message},
-            reply({500, Body}, Req, Handler)
+            reply({500, Message}, Req, Handler)
     end;
 
 %% response simple
