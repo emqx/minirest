@@ -35,11 +35,12 @@ trails_schemas(Options) ->
     end.
 
 modules(Options) ->
-    case maps:get(swagger_support, Options, true) of
+    Modules = maps:get(modules, Options, []),
+    case maps:get(server_info_api, Options, false) of
         true ->
-            [minirest_info_api | maps:get(modules, Options, [])];
+            [minirest_info_api | Modules];
         false ->
-            maps:get(modules, Options, [])
+            Modules
     end.
 
 trails_schemas(Options, ModuleApiSpecList) ->
