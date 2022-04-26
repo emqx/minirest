@@ -77,7 +77,7 @@ forma_data_decoder(Request, Body) ->
 loop_form(Request) ->
     case cowboy_req:read_part(Request) of
         {ok, PartHeader, Request1} ->
-            {ok, Data, Request2} = cowboy_req:read_part_body(Request1),
+            {ok, Data, Request2} = read_body(Request1, <<>>),
             case cow_multipart:form_data(PartHeader) of
                 {data, FieldName} ->
                     {#{FieldName => Data}, Request2};
@@ -88,6 +88,14 @@ loop_form(Request) ->
             end;
         {done, Request1} ->
             {done, Request1}
+    end.
+
+read_body(Request, Acc) ->
+    case cowboy_req:read_part_body(Request) of
+        {ok, Bin, Request1} ->
+            {ok, <<Acc/binary, Bin/binary>>, Request1};
+        {more, Bin, Request2} ->
+            read_body(Request2, <<Acc/binary, Bin/binary>>)
     end.
 
 binary_decoder(Request) ->
