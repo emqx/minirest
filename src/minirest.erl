@@ -88,11 +88,13 @@ log_start_result({error, no_cert = Reason}, Log) ->
     ?LOG(error, Log#{msg => ?FAILED_MSG, description => "no_certificate_provided;", reason => Reason});
 %% copy from ranch.erl line:162
 log_start_result({error, {{shutdown, {failed_to_start_child, ranch_acceptors_sup,
-    {listen_error, _, Reason}}}, _}}, Log0) ->
+    Reason}}, _}}, Log0) ->
     Log = Log0#{msg => ?FAILED_MSG, reason => Reason},
     case Reason of
-        eaddrnotavail -> ?LOG(error, Log#{description => "cannot_assign_requested_address"});
-        ebusy -> ?LOG(error, Log#{description => "file_busy"});
+        {listen_error, _, eaddrnotavail} ->
+            ?LOG(error, Log#{description => "cannot_assign_requested_address"});
+        {listen_error, _, ebusy} ->
+            ?LOG(error, Log#{description => "file_busy"});
         _ -> ?LOG(error, Log)
     end.
 
