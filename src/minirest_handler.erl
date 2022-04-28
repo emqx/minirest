@@ -123,7 +123,8 @@ reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes}
   andalso is_atom(Code) ->
     case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
-            {ok, Headers, Body} = minirest_body:encode(#{code => Code, message => Message}),
+            ErrorMessageStruct = {message, #{code => Code, message => Message}},
+            {ok, Headers, Body} = minirest_body:encode(ErrorMessageStruct),
             reply({ErrorStatus, Headers, Body}, Req, Handler);
         false ->
             Message =
