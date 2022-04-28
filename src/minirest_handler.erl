@@ -116,13 +116,11 @@ apply_callback(Request, Params, Handler) ->
 %% response error
 reply({ErrorStatus, #{code := Code, message := Message}}, Req, Handler)
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
-  andalso is_atom(Code)
-  andalso is_binary(Message) ->
+  andalso is_atom(Code) ->
     reply({ErrorStatus, Code, Message}, Req, Handler);
 reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes})
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
-  andalso is_atom(Code)
-  andalso is_binary(Message) ->
+  andalso is_atom(Code) ->
     case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
             {ok, Headers, Body} = minirest_body:encode(#{code => Code, message => Message}),
