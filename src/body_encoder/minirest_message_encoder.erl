@@ -17,19 +17,15 @@
 
 -export([ encode/1
         , encode/2
-        , encode/3
         ]).
 
 encode(Message) ->
-    encode(Message, [space, {indent, 4}]).
-
-encode(Message, Opts) ->
     Config = #{depth => unlimited, single_line => true},
-    encode(Message, Opts, Config).
+    encode(Message, Config).
 
-encode(Message, Opts, Config) ->
+encode(Message, Config) ->
     JsonReady = best_effort_json_obj(Message, Config),
-    jsx:encode(JsonReady, Opts).
+    jsx:encode(JsonReady).
 
 best_effort_json_obj(List, Config) when is_list(List) ->
     try
