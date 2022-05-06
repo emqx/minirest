@@ -23,7 +23,6 @@
 
 trails_schemas(Options) ->
     Modules = modules(Options),
-    Name = maps:get(name, Options),
     Security = maps:get(security, Options, undefined),
     ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
     {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),
@@ -31,6 +30,7 @@ trails_schemas(Options) ->
         false ->
             {Trails0, Schemas};
         _ ->
+            Name = maps:get(name, Options),
             {Trails0 ++ trails:trails([{cowboy_swagger_handler, #{server => Name}}]), Schemas}
     end.
 

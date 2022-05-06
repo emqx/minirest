@@ -17,6 +17,7 @@
 -export([ start/2
         , start/3
         , stop/1
+        , update_dispatch/1
         , ref/1]).
 
 -include("minirest.hrl").
@@ -26,14 +27,27 @@ start(Name, Options) ->
 
 start(Name, RanchOptions, Options) ->
     Protocol = maps:get(protocol, Options, http),
+    Dispatch = merge_dispatch([], Options),
+    persistent_term:put(Name, Dispatch),
+    CowboyOptions = middlewares(Options,
+        #{
+            env => #{dispatch => {persistent_term, Name},
+                options => Options#{name => Name}}
+        }),
+    start_listener(Protocol, Name, RanchOptions, CowboyOptions).
+
+update_dispatch(Name) ->
+    #{env := #{options := Options}} = ranch:get_protocol_options(Name),
+    Routers0 = merge_dispatch([], Options),
+    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport = maps:get(swagger_support, Options, true),
     SwaggerSupport andalso set_swagger_global_spec(Options),
-    {Trails, Schemas} = minirest_trails:trails_schemas(Options#{name => Name}),
     SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
-    Dispatch = merge_dispatch(Trails, Options),
-    CowboyOptions = middlewares(Options, #{env => #{dispatch => Dispatch}}),
-    start_listener(Protocol, Name, RanchOptions, CowboyOptions).
+    [{Host, CowField, RestRouters}] = trails:single_host_compile(Trails),
+    NewDispatch = [{Host, CowField, RestRouters ++ Routers0}],
+    persistent_term:put(Name, NewDispatch),
+    ok.
 
 stop(Name) ->
     cowboy:stop_listener(Name).
