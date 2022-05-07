@@ -24,7 +24,7 @@
 trails_schemas(Options) ->
     Modules = modules(Options),
     Security = maps:get(security, Options, undefined),
-    ModuleApiSpecList = [api_spec(Security, Module) || Module <- Modules],
+    ModuleApiSpecList = minirest_util:pmap(fun(Module) -> api_spec(Security, Module) end, Modules, 10000),
     {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),
     case maps:get(swagger_support, Options, true) of
         false ->
@@ -62,6 +62,7 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
 trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
     Fun =
         fun(Method, MethodDef, HandlerStates) ->
+            ErrorCodes = get_error_codes(MethodDef),
             HandlerState = #handler{
                 method        = Method,
                 path          = Path,
@@ -69,9 +70,9 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
                 filter        = maps:get(filter, Options, undefined),
-                error_codes   = get_error_codes(MethodDef)
+                error_codes   = ErrorCodes
                 },
-            minirest_info_api:add_codes(get_error_codes(MethodDef)),
+            minirest_info_api:add_codes(ErrorCodes),
             maps:put(binary_method(Method), HandlerState, HandlerStates)
         end,
     HandlerStates = maps:fold(Fun, #{}, Metadata),
