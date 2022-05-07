@@ -25,7 +25,7 @@ encode(Message) ->
 
 encode(Message, Config) ->
     JsonReady = best_effort_json_obj(Message, Config),
-    jsx:encode(JsonReady).
+    {ok, ?DEFAULT_RESPONSE_HEADERS, jsx:encode(JsonReady)}.
 
 best_effort_json_obj(List, Config) when is_list(List) ->
     try
