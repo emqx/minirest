@@ -19,6 +19,7 @@
         , encode/2
         ]).
 
+encode({message, Message}) -> encode(Message);
 encode(Message) ->
     Config = #{depth => unlimited, single_line => true},
     encode(Message, Config).
