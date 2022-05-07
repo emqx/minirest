@@ -38,7 +38,7 @@ start(Name, RanchOptions, Options) ->
 
 update_dispatch(Name) ->
     #{env := #{options := Options}} = ranch:get_protocol_options(Name),
-    Routers0 = merge_dispatch([], Options),
+    [{_Host0, _CowField0, Routers0}] = merge_dispatch([], Options),
     {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport = maps:get(swagger_support, Options, true),
     SwaggerSupport andalso set_swagger_global_spec(Options),
