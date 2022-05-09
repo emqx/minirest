@@ -37,7 +37,7 @@ start(Name, RanchOptions, Options) ->
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
 update_dispatch(Name) ->
-    #{env := #{options := Options}} = ranch:get_protocol_options(Name),
+    Protocol = #{env := #{options := Options} = Env} = ranch:get_protocol_options(Name),
     [{_Host0, _CowField0, Routers0}] = merge_dispatch([], Options),
     {Trails, Schemas} = minirest_trails:trails_schemas(Options),
     SwaggerSupport = maps:get(swagger_support, Options, true),
@@ -47,6 +47,7 @@ update_dispatch(Name) ->
     [{Host, CowField, RestRouters}] = trails:single_host_compile(Trails),
     NewDispatch = [{Host, CowField, RestRouters ++ Routers0}],
     persistent_term:put(Name, NewDispatch),
+    ranch:set_protocol_options(Name, Protocol#{env => maps:remove(options, Env)}),
     ok.
 
 stop(Name) ->
