@@ -24,7 +24,8 @@
 trails_schemas(Options) ->
     Modules = modules(Options),
     Security = maps:get(security, Options, undefined),
-    ModuleApiSpecList = minirest_util:pmap(fun(Module) -> api_spec(Security, Module) end, Modules, 10000),
+    ModuleApiSpecList = minirest_util:pmap(fun(Module) -> api_spec(Security, Module) end, Modules, 30000),
+    assert_module_api_specs(ModuleApiSpecList),
     {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),
     case maps:get(swagger_support, Options, true) of
         false ->
@@ -193,3 +194,9 @@ binary_method(patch)   -> <<"PATCH">>;
 binary_method(options) -> <<"OPTION">>;
 binary_method(connect) -> <<"CONNECT">>;
 binary_method(trace)   -> <<"TRACE">>.
+
+assert_module_api_specs(ModuleApiSpec) ->
+    case [E || E = {error, _} <- ModuleApiSpec] of
+        [] -> ok;
+        Error -> erlang:error(Error)
+    end.

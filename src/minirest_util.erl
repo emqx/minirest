@@ -30,10 +30,10 @@ pmap_exec(CallerPid, Fun, El, Timeout) ->
   ExecResult =
     receive
       {result, Pid, Result} -> Result;
-      {'DOWN', Ref, process, Pid, Reason} -> {error, Reason}
+      {'DOWN', Ref, process, Pid, Reason} -> {error, {El, Reason}}
     after Timeout ->
       true = erlang:exit(Pid, kill),
-      {error, timeout}
+      {error, {El, timeout}}
     end,
   CallerPid ! {ExecPid, ExecResult}.
 
