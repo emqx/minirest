@@ -23,8 +23,13 @@
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
-    {Response, Handler} = handle(Request0, State),
-    Request = reply(Response, Request0, Handler),
+    Request =
+        case handle(Request0, State) of
+            {error, {StatusCode, Headers, Body}} ->
+                cowboy_req:reply(StatusCode, Headers, Body, Request0);
+            {ok, Response, Handler} ->
+                reply(Response, Request0, Handler)
+        end,
     {ok, Request, State}.
 
 %%%==============================================================================================
@@ -34,9 +39,9 @@ handle(Request, State) ->
     case maps:find(Method, State) of
         error ->
             Headers = allow_method_header(maps:keys(State)),
-            {?RESPONSE_CODE_METHOD_NOT_ALLOWED, Headers, <<"">>};
+            {error, {?RESPONSE_CODE_METHOD_NOT_ALLOWED, Headers, <<"">>}};
         {ok, Handler} ->
-            {do_auth(Request, Handler), Handler}
+            {ok, do_auth(Request, Handler), Handler}
     end.
 
 allow_method_header(Allow) ->
