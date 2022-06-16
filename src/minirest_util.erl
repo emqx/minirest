@@ -26,10 +26,18 @@ pmap(Fun, List, Timeout) ->
 
 pmap_exec(CallerPid, Fun, El, Timeout) ->
   ExecPid = self(),
-  {Pid, Ref} = spawn_monitor(fun() -> ExecPid ! {result, self(), Fun(El)} end),
+  {Pid, Ref} = spawn_monitor(fun() ->
+    Res =
+      try {normal, Fun(El)}
+      catch C:E:ST ->
+        {crash, {C, E, ST}}
+      end,
+    ExecPid ! {result, self(), Res}
+                             end),
   ExecResult =
     receive
-      {result, Pid, Result} -> Result;
+      {result, Pid, {normal, Result}} -> Result;
+      {result, Pid, {crash, {C, E, ST}}} -> erlang:raise(C, E, ST);
       {'DOWN', Ref, process, Pid, Reason} -> {error, {El, Reason}}
     after Timeout ->
       true = erlang:exit(Pid, kill),
