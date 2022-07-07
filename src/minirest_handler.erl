@@ -19,8 +19,10 @@
         ]).
 
 -type(config() :: #{apps => [atom()], modules => [module()], except => [atom()], filter => fun() }).
+-type(handler() :: {?MODULE, dispatch, list()}).
 
--export_type([config/0]).
+-export_type([config/0,
+              handler/0]).
 
 -define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
 

@@ -36,51 +36,58 @@
 -define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
 
 -type(option() :: {authorization, fun()}).
--type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
 
--export_type([ option/0
-             , handler/0
-             ]).
+-type(name() :: atom()).
+-type(host() :: inet:hostname()
+              | inet:ip_address()).
+-type(port_number() :: inet:port_number()).
+-type(listen_on() :: {host(), inet:port_number()}
+                   | port_number()
+     ).
+
+-export_type([ option/0]).
 
 %%------------------------------------------------------------------------------
 %% Start/Stop Http
 %%------------------------------------------------------------------------------
 
--spec(start_http(atom(), list(), list()) -> {ok, pid()}).
-start_http(ServerName, Options, Handlers) ->
+-spec(start_http({name(), listen_on()}, list(), list()) -> {ok, pid()} | ok).
+start_http({ServerName, ListenOn} = Name, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
-        {ok, _}  -> ok;
-        {error, {already_started, _}} -> ok;
+    NListenOn = format_listen_on(ListenOn),
+    case cowboy:start_clear(Name, Options, #{env => #{dispatch => Dispatch}}) of
+        {ok, _Pid} = Res ->
+            io:format("Start ~s listener on ~s successfully.~n", [ServerName, NListenOn]),
+            Res;
+        {error, {already_started, _}} ->
+            ok;
         {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: the port is occupied", [ServerName, NListenOn]),
             error(eaddrinuse);
         {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: ~0p", [ServerName, get_port(Options), Any]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~0p", [ServerName, NListenOn, Any]),
             error(Any)
-    end,
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
+    end.
 
--spec(start_https(atom(), list(), list()) -> {ok, pid()}).
-start_https(ServerName, Options, Handlers) ->
+-spec(start_https({name(), listen_on()}, list(), list()) -> {ok, pid()} | ok).
+start_https({ServerName, ListenOn} = Name, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
-        {ok, _}  -> ok;
+    NListenOn = format_listen_on(ListenOn),
+    case cowboy:start_tls(Name, Options, #{env => #{dispatch => Dispatch}}) of
+        {ok, _Pid} = Res ->
+            io:format("Start ~s listener on ~s successfully.~n", [ServerName, NListenOn]),
+            Res;
         {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: the port is occupied", [ServerName, NListenOn]),
             error(eaddrinuse);
         {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: ~0p", [ServerName, get_port(Options), Any]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~0p", [ServerName, NListenOn, Any]),
             error(Any)
-    end,
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
+    end.
 
--spec(stop_http(atom()) -> ok | {error, any()}).
-stop_http(ServerName) ->
-    cowboy:stop_listener(ServerName).
-
-get_port(#{socket_opts := SocketOpts}) ->
-    proplists:get_value(port, SocketOpts, 18083).
+-spec(stop_http({atom(), any()}) -> ok | {error, any()}).
+stop_http({_ServerName, _Port} = Name) ->
+    cowboy:stop_listener(Name).
 
 map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
@@ -97,7 +104,7 @@ handlers(Handlers) ->
 %% Handler helper
 %%------------------------------------------------------------------------------
 
--spec(handler(minirest_handler:config()) -> handler()).
+-spec(handler(minirest_handler:config()) -> minirest_handler:handler()).
 handler(Config) -> minirest_handler:init(Config).
 
 %%------------------------------------------------------------------------------
@@ -200,3 +207,17 @@ format_msg(Message) when is_binary(Message) ->
     Message;
 format_msg(Message) ->
     iolist_to_binary(io_lib:format("~0p", [Message])).
+
+%%------------------------------------------------------------------------------
+%% Internal Funcs
+%%------------------------------------------------------------------------------
+
+-spec(format_listen_on(listen_on()) -> string()).
+format_listen_on(Port) when is_integer(Port) ->
+    io_lib:format("0.0.0.0:~w", [Port]);
+format_listen_on({Addr, Port}) when is_list(Addr) ->
+    io_lib:format("~s:~w", [Addr, Port]);
+format_listen_on({Addr, Port}) when is_tuple(Addr) ->
+    io_lib:format("~s:~w", [inet:ntoa(Addr), Port]);
+format_listen_on(IpPort) when is_list(IpPort) ->
+    IpPort.
