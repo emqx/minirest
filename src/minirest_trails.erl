@@ -63,7 +63,8 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
 trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
     Fun =
         fun(Method, MethodDef, HandlerStates) ->
-            ErrorCodes = get_error_codes(MethodDef),
+            #{responses := Responses} = MethodDef,
+            ErrorCodes = maps:fold(fun get_error_codes/3, [], Responses),
             HandlerState = #handler{
                 method        = Method,
                 path          = Path,
@@ -80,49 +81,34 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
     CompletePath  = append_base_path(BasePath, Path),
     trails:trail(CompletePath, ?HANDLER, HandlerStates, Metadata).
 
-get_error_codes(#{responses := Responses}) ->
-    Fun =
-        fun(StatusCode, ResponseDef, Codes) ->
-            case
-                (StatusCode < 200 orelse 300 =< StatusCode)
-                andalso
-                get_error_codes_(ResponseDef)
-            of
-                NewCodes when is_list(NewCodes) ->
-                    lists:append(NewCodes, Codes);
-                _ ->
-                    Codes
-            end
-        end,
-    maps:fold(Fun, [], Responses).
+-define(NEST_CODE_KEYS, [<<"content">>,
+    <<"application/json">>,
+    <<"schema">>,
+    <<"properties">>,
+    <<"code">>
+]).
 
-get_error_codes_(ResponseDef) when is_map(ResponseDef) ->
-    %% generate prop_list & map
-    get_error_codes_(jsx:encode(ResponseDef));
-get_error_codes_(ResponseDef) when is_binary(ResponseDef) ->
-    KeyList = [
-        <<"content">>,
-        <<"application/json">>,
-        <<"schema">>,
-        <<"properties">>,
-        <<"code">>,
-        <<"enum">>
-    ],
-    get_error_codes_(KeyList, jsx:decode(ResponseDef)).
+get_error_codes(Status, _RespDef, Acc) when Status >= 200 andalso Status < 300 -> Acc;
+get_error_codes(_Status, RespDef, Acc) when is_map(RespDef) ->
+    case get_error_codes_(?NEST_CODE_KEYS, RespDef) of
+        #{enum := Codes} -> format_code(Codes) ++ Acc;
+        #{<<"enum">> := Codes} -> format_code(Codes) ++ Acc;
+        _ -> Acc
+    end.
 
-get_error_codes_([], _Data) ->
-    undefined;
+get_error_codes_([], Data) -> Data;
+get_error_codes_([Key | Keys], Data) when is_list(Data)->
+    case lists:keyfind(Key, 1, Data) of
+        false -> [];
+        SubData -> get_error_codes_(Keys, SubData)
+    end;
 get_error_codes_([Key | Keys], Data) when is_map(Data)->
     case maps:get(Key, Data, undefined) of
-        undefined ->
-            undefined;
-        Codes when is_list(Codes) ->
-            [binary_to_atom(Code) || Code <- Codes];
-        Map when is_map(Map) ->
-            get_error_codes_(Keys, Map)
-    end;
-get_error_codes_(_, _Data) ->
-    undefined.
+        undefined -> [];
+        SubData -> get_error_codes_(Keys, SubData)
+    end.
+
+format_code(Codes) -> [binary_to_atom(Code) || Code <- Codes].
 
 api_spec(Security, Module) ->
     try
@@ -174,16 +160,12 @@ decs_str_to_binary(Data) ->
 
 root_path(Path) ->
     case string:tokens(Path, "/") of
-        [] ->
-            "/";
-        [Root | _] ->
-            Root
+        [] -> "/";
+        [Root | _] -> Root
     end.
 
-append_base_path(undefined, Path) ->
-    Path;
-append_base_path(BasePath, Path) ->
-    lists:append(BasePath, Path).
+append_base_path(undefined, Path) -> Path;
+append_base_path(BasePath, Path) -> lists:append(BasePath, Path).
 
 binary_method(get)     -> <<"GET">>;
 binary_method(post)    -> <<"POST">>;
