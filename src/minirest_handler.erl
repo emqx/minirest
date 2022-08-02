@@ -132,11 +132,11 @@ reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes}
             {ok, Headers, Body} = minirest_body:encode(ErrorMessageStruct),
             reply({ErrorStatus, Headers, Body}, Req, Handler);
         false ->
-            Message =
+            NewMessage =
                 list_to_binary(
                     io_lib:format(
                         "not support code ~p, message ~p, schema def ~p", [Code, Message, Codes])),
-            reply({500, Message}, Req, Handler)
+            reply({500, NewMessage}, Req, Handler)
     end;
 
 %% response simple

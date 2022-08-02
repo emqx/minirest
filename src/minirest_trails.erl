@@ -100,7 +100,7 @@ get_error_codes_([], Data) -> Data;
 get_error_codes_([Key | Keys], Data) when is_list(Data)->
     case lists:keyfind(Key, 1, Data) of
         false -> [];
-        SubData -> get_error_codes_(Keys, SubData)
+        {_, SubData} -> get_error_codes_(Keys, SubData)
     end;
 get_error_codes_([Key | Keys], Data) when is_map(Data)->
     case maps:get(Key, Data, undefined) of
