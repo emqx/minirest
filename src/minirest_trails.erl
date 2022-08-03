@@ -108,7 +108,11 @@ get_error_codes_([Key | Keys], Data) when is_map(Data)->
         SubData -> get_error_codes_(Keys, SubData)
     end.
 
-format_code(Codes) -> [binary_to_atom(Code) || Code <- Codes].
+format_code(Codes) -> lists:map(
+    fun(C) when is_binary(C) -> binary_to_atom(C);
+        (C) when is_list(C) -> list_to_atom(C);
+        (C) when is_atom(C) -> C
+    end, Codes).
 
 api_spec(Security, Module) ->
     try
