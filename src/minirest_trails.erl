@@ -165,7 +165,7 @@ decs_str_to_binary(Data) ->
 root_path(Path) ->
     case string:tokens(Path, "/") of
         [] -> "/";
-        [Root | _] -> Root
+        [Root | _] -> string:titlecase(Root)
     end.
 
 append_base_path(undefined, Path) -> Path;
