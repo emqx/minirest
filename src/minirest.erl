@@ -53,13 +53,13 @@ start_http(ServerName, Options, Handlers) ->
         {ok, _}  -> ok;
         {error, {already_started, _}} -> ok;
         {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: the port is occupied", [ServerName, format_bind(Options)]),
             error(eaddrinuse);
         {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: ~0p", [ServerName, get_port(Options), Any]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~0p", [ServerName, format_bind(Options), Any]),
             error(Any)
     end,
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
+    io:format("Start ~s listener on ~s successfully.~n", [ServerName, format_bind(Options)]).
 
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
 start_https(ServerName, Options, Handlers) ->
@@ -67,13 +67,20 @@ start_https(ServerName, Options, Handlers) ->
     case cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
         {ok, _}  -> ok;
         {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: the port is occupied", [ServerName, format_bind(Options)]),
             error(eaddrinuse);
         {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~p unsuccessfully: ~0p", [ServerName, get_port(Options), Any]),
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~0p", [ServerName, format_bind(Options), Any]),
             error(Any)
     end,
-    io:format("Start ~s listener on ~p successfully.~n", [ServerName, get_port(Options)]).
+    io:format("Start ~s listener on ~s successfully.~n", [ServerName, format_bind(Options)]).
+
+format_bind(Options) ->
+    Port = get_port(Options),
+    case get_ip(Options) of
+      undefined -> integer_to_binary(Port);
+      IP -> iolist_to_binary([IP, ":", integer_to_binary(Port)])
+    end.
 
 -spec(stop_http(atom()) -> ok | {error, any()}).
 stop_http(ServerName) ->
@@ -81,6 +88,12 @@ stop_http(ServerName) ->
 
 get_port(#{socket_opts := SocketOpts}) ->
     proplists:get_value(port, SocketOpts, 18083).
+
+get_ip(#{socket_opts := SocketOpts}) ->
+  case proplists:get_value(ip, SocketOpts) of
+    undefined -> undefined;
+    IP -> inet:ntoa(IP)
+  end.
 
 map({Prefix, MFArgs}) ->
     map({Prefix, MFArgs, []});
