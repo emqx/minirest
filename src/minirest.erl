@@ -48,27 +48,25 @@
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
+    start_listener(start_clear, ServerName, Options, Handlers).
+
+-spec(start_https(atom(), list(), list()) -> {ok, pid()}).
+start_https(ServerName, Options, Handlers) ->
+    start_listener(start_tls, ServerName, Options, Handlers).
+
+start_listener(Function, ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
+    Router = #{env => #{dispatch => Dispatch}},
+    case erlang:apply(cowboy, Function, [ServerName, Options, Router]) of
         {ok, _}  -> ok;
         {error, {already_started, _}} -> ok;
         {error, eaddrinuse} ->
             ?LOG(error, "Start ~s listener on ~s unsuccessfully: the port is occupied", [ServerName, format_bind(Options)]),
             error(eaddrinuse);
-        {error, Any} ->
-            ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~0p", [ServerName, format_bind(Options), Any]),
-            error(Any)
-    end,
-    io:format("Start ~s listener on ~s successfully.~n", [ServerName, format_bind(Options)]).
-
--spec(start_https(atom(), list(), list()) -> {ok, pid()}).
-start_https(ServerName, Options, Handlers) ->
-    Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
-        {ok, _}  -> ok;
-        {error, eaddrinuse} ->
-            ?LOG(error, "Start ~s listener on ~s unsuccessfully: the port is occupied", [ServerName, format_bind(Options)]),
-            error(eaddrinuse);
+        {error, {{shutdown, {failed_to_start_child, ranch_acceptors_sup, Reason}}, _}} ->
+            %% Don't print stacktrace, it's too long.
+            ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~p", [ServerName, format_bind(Options), Reason]),
+            error(Reason);
         {error, Any} ->
             ?LOG(error, "Start ~s listener on ~s unsuccessfully: ~0p", [ServerName, format_bind(Options), Any]),
             error(Any)
