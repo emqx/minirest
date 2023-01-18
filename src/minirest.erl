@@ -17,7 +17,9 @@
 -include_lib("kernel/include/file.hrl").
 
 -export([ start_http/3
+        , start_http/4
         , start_https/3
+        , start_https/4
         , stop_http/1
         ]).
 
@@ -48,15 +50,23 @@
 
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
-    start_listener(start_clear, ServerName, Options, Handlers).
+    start_http(ServerName, Options, Handlers, #{}).
+
+-spec(start_http(atom(), list(), list(), cowboy:opts()) -> {ok, pid()}).
+start_http(ServerName, Options, Handlers, ProtoOpts) ->
+    start_listener(start_clear, ServerName, Options, Handlers, ProtoOpts).
 
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
 start_https(ServerName, Options, Handlers) ->
-    start_listener(start_tls, ServerName, Options, Handlers).
+    start_https(ServerName, Options, Handlers, #{}).
 
-start_listener(Function, ServerName, Options, Handlers) ->
+-spec(start_https(atom(), list(), list(), cowboy:opts()) -> {ok, pid()}).
+start_https(ServerName, Options, Handlers, ProtoOpts) ->
+    start_listener(start_tls, ServerName, Options, Handlers, ProtoOpts).
+
+start_listener(Function, ServerName, Options, Handlers, ProtoOpts) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    Router = #{env => #{dispatch => Dispatch}},
+    Router = ProtoOpts#{env => #{dispatch => Dispatch}},
     case erlang:apply(cowboy, Function, [ServerName, Options, Router]) of
         {ok, _}  -> ok;
         {error, {already_started, _}} -> ok;
