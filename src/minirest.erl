@@ -29,11 +29,12 @@ start(Name, RanchOptions, Options) ->
     Protocol = maps:get(protocol, Options, http),
     Dispatch = merge_dispatch([], Options),
     persistent_term:put(Name, Dispatch),
+    ProtoOpts = maps:get(protocol_options, Options, #{}),
     CowboyOptions = middlewares(Options,
-        #{
-            env => #{dispatch => {persistent_term, Name},
-                options => Options#{name => Name}}
-        }),
+        ProtoOpts#{
+                   env => #{dispatch => {persistent_term, Name},
+                            options => Options#{name => Name}}
+                  }),
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
 update_dispatch(Name) ->
