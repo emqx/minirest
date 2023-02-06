@@ -125,4 +125,6 @@ encoder(Body) when is_list(Body) ->
 encoder({form_data, _}) ->
     fun minirest_form_data_encoder:encode/1;
 encoder({message, _}) ->
-    fun minirest_message_encoder:encode/1.
+    fun minirest_message_encoder:encode/1;
+encoder({qlc_handle, _}) ->
+    fun(QH) -> {ok, #{}, QH} end.
