@@ -149,7 +149,7 @@ reply({StatusCode}, Req, _Handler) ->
 reply({StatusCode, Body0}, Req, Handler) ->
     case minirest_body:encode(Body0) of
         {ok, Headers, Body} ->
-            cowboy_req:reply(StatusCode, Headers, Body, Req);
+            reply_with_body(StatusCode, Headers, Body, Req);
         {response, Response} ->
             reply(Response, Req, Handler)
     end;
@@ -157,7 +157,7 @@ reply({StatusCode, Body0}, Req, Handler) ->
 reply({StatusCode, Headers, Body0}, Req, Handler) ->
     case minirest_body:encode(Body0) of
         {ok, Headers1, Body} ->
-            cowboy_req:reply(StatusCode, maps:merge(Headers1, Headers), Body, Req);
+            reply_with_body(StatusCode, maps:merge(Headers1, Headers), Body, Req);
         {response, Response} ->
             reply(Response, Req, Handler)
     end;
@@ -166,6 +166,20 @@ reply(BadReturn, Req, _Handler) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
     Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
     cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
+
+reply_with_body(StatusCode, Headers, Body, Req) when is_binary(Body) ->
+        cowboy_req:reply(StatusCode, Headers, Body, Req);
+reply_with_body(StatusCode, Headers, {qlc_handle, _} = BodyQH, Req0) ->
+    Req1 = cowboy_req:stream_reply(StatusCode, Headers, Req0),
+    qlc:fold(
+      fun(Data, Req) ->
+              cowboy_req:stream_body(Data, nofin, Req),
+              Req
+      end,
+      Req1,
+      BodyQH),
+    cowboy_req:stream_body(<<>>, fin, Req1),
+    Req1.
 
 maybe_ignore_code_check(401, _Code) -> true;
 maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
