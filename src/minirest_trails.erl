@@ -143,6 +143,11 @@ generate_api_(Default, {Path, MetaData, Function, Options}) ->
         end,
     {Path, maps:fold(MergeDefFun, #{}, MetaData), Function, Options}.
 
+%% description must be a string(list or binary)
+%% otherwise, raise minirest_description_not_format error.
+%% for example: can't find description in i18n file.
+decs_str_to_binary(#{description := Desc}) when is_tuple(Desc) ->
+    erlang:error({minirest_description_not_format, Desc});
 decs_str_to_binary(Data = #{description := Desc}) when is_list(Desc) ->
     decs_str_to_binary(Data#{description => list_to_binary(Desc)});
 decs_str_to_binary(Data) when is_map(Data) ->
