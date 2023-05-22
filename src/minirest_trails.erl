@@ -147,7 +147,7 @@ generate_api_(Default, {Path, MetaData, Function, Options}) ->
 %% otherwise, raise minirest_description_not_format error.
 %% for example: can't find description in i18n file.
 decs_str_to_binary(#{description := Desc}) when is_tuple(Desc) ->
-    erlang:error({minirest_description_not_format, Desc});
+    erlang:error({minirest_description_not_formatted, Desc});
 decs_str_to_binary(Data = #{description := Desc}) when is_list(Desc) ->
     decs_str_to_binary(Data#{description => list_to_binary(Desc)});
 decs_str_to_binary(Data) when is_map(Data) ->
