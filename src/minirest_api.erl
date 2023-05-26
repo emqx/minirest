@@ -31,8 +31,8 @@ find_api_modules([App | Apps], Acc) ->
         {ok, Modules} ->
             NewAcc = lists:filter(fun(Module) ->
                     Info = Module:module_info(attributes),
-                    Behaviour = proplists:get_value(behavior, Info, []) ++
-                                    proplists:get_value(behaviour, Info, []),
+                    Behaviour = lists:flatten(proplists:get_all_values(behavior, Info) ++
+                                    proplists:get_all_values(behaviour, Info)),
                     lists:member(minirest_api, Behaviour)
             end, Modules),
             find_api_modules(Apps, NewAcc ++ Acc)
