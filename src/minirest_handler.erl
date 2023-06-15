@@ -84,7 +84,7 @@ dispatch(Req, Route, Filter) ->
 dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
     case catch parse_params(Req) of
         {'EXIT', Reason} ->
-            error_logger:error_msg("Params error: ~p", [Reason]),
+            logger:error("Params error: ~p", [minirest_utils:redact(Reason)]),
             reply(400, <<"Bad Request">>, Req);
         Params ->
             case erlang:apply(Mod, Fun, [Bindings, Params]) of

@@ -180,8 +180,9 @@ apply_handler(Req, Path, {M, F, Args}) ->
     erlang:apply(M, F, [Path, Req | Args]).
 
 internal_error(Req, Error, Stacktrace) ->
-    error_logger:error_msg("~s ~s error: ~p, stacktrace:~n~p",
-                           [cowboy_req:method(Req), cowboy_req:path(Req), Error, Stacktrace]),
+    logger:error("~s ~s error: ~p, stacktrace:~n~p",
+        [cowboy_req:method(Req), cowboy_req:path(Req),
+         minirest_utils:redact(Error), minirest_utils:redact(Stacktrace)]),
     cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
 
 %%------------------------------------------------------------------------------
