@@ -37,6 +37,8 @@
 
 -define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
 
+-define(ERROR_MSG(MSG), list_to_binary(io_lib:format("~p", [(MSG)]))).
+
 -type(option() :: {authorization, fun()}).
 -type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
 
@@ -135,8 +137,11 @@ handle_request(Req, Handlers) ->
         {ok, Path, Handler} ->
             try
                 apply_handler(Req, Path, Handler)
-            catch _:Error:Stacktrace ->
-                internal_error(Req, Error, Stacktrace)
+            catch
+                throw:Error ->
+                    badarg_error(Req, Error);
+                _:Error:Stacktrace ->
+                    internal_error(Req, Error, Stacktrace)
             end;
         not_found ->
             cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
@@ -180,10 +185,15 @@ apply_handler(Req, Path, {M, F, Args}) ->
     erlang:apply(M, F, [Path, Req | Args]).
 
 internal_error(Req, Error, Stacktrace) ->
-    logger:error("~s ~s error: ~p, stacktrace:~n~p",
+    logger:error("[minirest] ~s ~s error: ~p, stacktrace:~n~p",
         [cowboy_req:method(Req), cowboy_req:path(Req),
          minirest_utils:redact(Error), minirest_utils:redact(Stacktrace)]),
     cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
+
+badarg_error(Req, Error) ->
+    logger:error("[minirest] ~s ~s error: ~p",
+        [cowboy_req:method(Req), cowboy_req:path(Req), minirest_utils:redact(Error)]),
+    cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, ?ERROR_MSG(Error), Req).
 
 %%------------------------------------------------------------------------------
 %% Return
