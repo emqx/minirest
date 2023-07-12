@@ -21,6 +21,7 @@
         , start_https/3
         , start_https/4
         , stop_http/1
+        , reply/4
         ]).
 
 -export([handler/1]).
@@ -45,6 +46,9 @@
 -export_type([ option/0
              , handler/0
              ]).
+reply(Code, Header,Body, Req) ->
+    io:format("Reply ~p ~0p~n ~0p~n ~0p~n", [Code, Header, Body, Req]),
+    reply(Code, Header, Body, Req).
 
 %%------------------------------------------------------------------------------
 %% Start/Stop Http
@@ -144,7 +148,7 @@ handle_request(Req, Handlers) ->
                     internal_error(Req, Error, Stacktrace)
             end;
         not_found ->
-            cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
+            reply(400, #{<<"content-type">> => <<"text/plain">>}, <<"Not found.">>, Req)
     end.
 
 match_handler(_Path, []) ->
@@ -162,20 +166,24 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := {Mod,
     case erlang:apply(Mod, Fun, [Req]) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
-            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+            reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req);
+        {reply, Code, Body} ->
+            reply(Code, #{}, Body, Req);
         {error, {lock_user, ResponseBody}} ->
-            cowboy_req:reply(401, #{}, ResponseBody, Req)
+            reply(401, #{}, ResponseBody, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthFun}}) ->
     case AuthFun(Req) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
-            cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
+            reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req);
+        {reply, Code, Body} ->
+            reply(Code, #{}, Body, Req);
         {error, {lock_user, ResponseBody}} ->
-            cowboy_req:reply(401, #{}, ResponseBody, Req)
+            reply(401, #{}, ResponseBody, Req)
     end;
 
 apply_handler(Req, Path, #{mfargs := MFArgs}) ->
@@ -188,12 +196,12 @@ internal_error(Req, Error, Stacktrace) ->
     logger:error("[minirest] ~s ~s error: ~p, stacktrace:~n~p",
         [cowboy_req:method(Req), cowboy_req:path(Req),
          minirest_utils:redact(Error), minirest_utils:redact(Stacktrace)]),
-    cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
+    reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
 
 badarg_error(Req, Error) ->
     logger:error("[minirest] ~s ~s error: ~p",
         [cowboy_req:method(Req), cowboy_req:path(Req), minirest_utils:redact(Error)]),
-    cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, ?ERROR_MSG(Error), Req).
+    reply(400, #{<<"content-type">> => <<"text/plain">>}, ?ERROR_MSG(Error), Req).
 
 %%------------------------------------------------------------------------------
 %% Return

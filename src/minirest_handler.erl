@@ -89,7 +89,7 @@ dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
         Params ->
             case erlang:apply(Mod, Fun, [Bindings, Params]) of
                 {file, Headers, {sendfile, _, _, _} = SendFile} ->
-                    cowboy_req:reply(200, Headers, SendFile, Req);
+                    minirest:reply(200, Headers, SendFile, Req);
                 Return -> jsonify(Return, Req)
             end
     end.
@@ -151,7 +151,7 @@ jsonify(ok, Req) ->
 jsonify({ok, Response}, Req) ->
     jsonify(200, Response, Req);
 jsonify({ok, Headers, Response}, Req) ->
-    cowboy_req:reply(200, Headers, Response, Req);
+    minirest:reply(200, Headers, Response, Req);
 jsonify({error, Reason}, Req) ->
     jsonify(500, Reason, Req);
 jsonify({Code, Response}, Req) when is_integer(Code) ->
@@ -164,14 +164,14 @@ jsonify(Code, Response, Req) ->
 jsonify(Code, Headers, Response, Req) ->
     try json_encode(Response) of
         Json ->
-            cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
+            minirest:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
     catch
         error:Reason:_Stacktrace ->
             ?LOG(error, "Encode ~p failed with ~p", [Response, Reason])
     end.
 
 reply(Code, Text, Req) ->
-    cowboy_req:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
+    minirest:reply(Code, #{<<"content-type">> => <<"text/plain">>}, Text, Req).
 
 %% JSON
 json_encode(D) ->
