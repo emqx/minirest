@@ -48,7 +48,7 @@
              ]).
 reply(Code, Header,Body, Req) ->
     io:format("Reply ~p ~0p~n ~0p~n ~0p~n", [Code, Header, Body, Req]),
-    reply(Code, Header, Body, Req).
+    cowboy_req:reply(Code, Header, Body, Req).
 
 %%------------------------------------------------------------------------------
 %% Start/Stop Http
