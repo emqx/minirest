@@ -47,8 +47,19 @@
              , handler/0
              ]).
 reply(Code, Header,Body, Req) ->
-    io:format("Reply ~p ~0p~n ~0p~n ~0p~n", [Code, Header, Body, Req]),
-    cowboy_req:reply(Code, Header, Body, Req).
+    Res = cowboy_req:reply(Code, Header, Body, Req),
+    try persistent_term:get(minirest_logger, undefined) of
+        undefined ->
+            % ignore
+            ok;
+        {Module, Func} ->
+            erlang:apply(Module, Func, [Code, Header, Body, Req]);
+        Fun ->
+            Fun(Code, Header, Body, Req)
+    catch _:_ ->
+        ok
+    end,
+    Res.
 
 %%------------------------------------------------------------------------------
 %% Start/Stop Http
