@@ -5,7 +5,7 @@ A mini RESTful API framework built on cowboy and jsx.
 
 ## Write a RESTful API Module
 
-```
+```erlang
 -module(rest_api_books).
 
 -rest_api(#{name   => list_books,
@@ -33,9 +33,18 @@ get(#{id := Id}, _Params) ->
 
 ## Start the REST server
 
+```erlang
+application:ensure_all_started(minirest),
+Dispatch = [{"/[...]", minirest, [{"/", minirest:handler(#{apps => [minirest]}), []}]}],
+minirest:start_http(test, #{socket_opts => [{port, 8080}]}, Dispatch, #{}). 
 ```
-Handler = {"/", minirest:handler(#{modules => [rest_api_books]})},
-minirest:start_http(demo_rest_server, 8080, [], [Handler]).
+
+## Test HTTP Request
+
+```bash
+curl http://127.0.0.1:8080
+
+curl http://127.0.0.1:8080/books/1
 ```
 
 ## Stop the REST server
