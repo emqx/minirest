@@ -14,15 +14,27 @@
 
 -module(minirest_handler).
 
+-behaviour(cowboy_middleware).
+
 -export([ init/1
         , dispatch/4
         ]).
+
+-export([execute/2]).
 
 -type(config() :: #{apps => [atom()], modules => [module()], except => [atom()], filter => fun() }).
 
 -export_type([config/0]).
 
 -define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
+-define(SECURITY_RESP_HEADERS, #{
+        <<"content-type">> => <<"application/json">>,
+        <<"x-frame-options">> => <<"DENY">>,
+        <<"x-content-type-options">> => <<"nosniff">>,
+        <<"x-xss-protection">> => <<"1">>,
+        %<<"content-security-policy">> => <<"default-src 'self'">>, % this will block the static files
+        <<"cache-control">> => <<"no-cache, no-store, must-revalidate">>
+    }).
 
 -spec(init(config()) -> {?MODULE, dispatch, list()}).
 init(Config) ->
@@ -93,6 +105,10 @@ dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
                 Return -> jsonify(Return, Req)
             end
     end.
+
+execute(Req0, Env) ->
+    Req = cowboy_req:set_resp_headers(?SECURITY_RESP_HEADERS, Req0),
+    {ok, Req, Env}.
 
 format_route(#{name := Name, method := Method, path := Path, descr := Descr}) ->
     #{name => Name, method => Method, path => format_path(Path), descr => iolist_to_binary(Descr)}.

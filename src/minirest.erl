@@ -35,6 +35,11 @@
 
 -define(LOG(Level, Format, Args), logger:Level("Minirest(Handler): " ++ Format, Args)).
 
+-define(PROTO_OPTS(DISPATCH), #{
+        env => #{dispatch => DISPATCH},
+        middlewares => [cowboy_router, minirest_handler, cowboy_handler]
+    }).
+
 -type(option() :: {authorization, fun()}).
 -type(handler() :: {string(), mfa()} | {string(), mfa(), list(option())}).
 
@@ -49,7 +54,7 @@
 -spec(start_http(atom(), list(), list()) -> {ok, pid()}).
 start_http(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_clear(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
+    case cowboy:start_clear(ServerName, Options, ?PROTO_OPTS(Dispatch)) of
         {ok, _}  -> ok;
         {error, {already_started, _}} -> ok;
         {error, eaddrinuse} ->
@@ -64,7 +69,7 @@ start_http(ServerName, Options, Handlers) ->
 -spec(start_https(atom(), list(), list()) -> {ok, pid()}).
 start_https(ServerName, Options, Handlers) ->
     Dispatch = cowboy_router:compile([{'_', handlers(Handlers)}]),
-    case cowboy:start_tls(ServerName, Options, #{env => #{dispatch => Dispatch}}) of 
+    case cowboy:start_tls(ServerName, Options, ?PROTO_OPTS(Dispatch)) of
         {ok, _}  -> ok;
         {error, eaddrinuse} ->
             ?LOG(error, "Start ~s listener on ~p unsuccessfully: the port is occupied", [ServerName, get_port(Options)]),
