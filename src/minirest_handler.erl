@@ -23,14 +23,11 @@
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
-    Request =
-        case handle(Request0, State) of
-            {error, {StatusCode, Headers, Body}} ->
-                cowboy_req:reply(StatusCode, Headers, Body, Request0);
-            {ok, Response, Handler} ->
-                reply(Response, Request0, Handler)
-        end,
-    {ok, Request, State}.
+    ReqStart = erlang:monotonic_time(),
+    {Code, Request1, Meta} = handle(Request0, State),
+    ReqEnd = erlang:monotonic_time(),
+    run_log_hook(Meta, ReqStart, ReqEnd, Code),
+    {ok, Request1, State}.
 
 %%%==============================================================================================
 %% internal
@@ -38,10 +35,38 @@ handle(Request, State) ->
     Method = cowboy_req:method(Request),
     case maps:find(Method, State) of
         error ->
+            StatusCode = ?RESPONSE_CODE_METHOD_NOT_ALLOWED,
             Headers = allow_method_header(maps:keys(State)),
-            {error, {?RESPONSE_CODE_METHOD_NOT_ALLOWED, Headers, <<"">>}};
-        {ok, Handler} ->
-            {ok, do_auth(Request, Handler), Handler}
+            Meta = Headers#{method => binary_to_existing_atom(Method)},
+            {StatusCode, cowboy_req:reply(StatusCode, Headers, <<"">>, Request), Meta};
+        {ok, Handler = #handler{path = Path, log = Log, method = MethodAtom}} ->
+            InitMeta = #{operate_id => Path, log => Log, method => MethodAtom},
+            case do_authorize(Request, Handler) of
+                {ok, AuthMeta} ->
+                    Meta = maps:merge(InitMeta, AuthMeta),
+                    case do_parse_params(Request) of
+                        {ok, Params, NRequest} ->
+                            case do_validate_params(Params, Handler) of
+                                {ok, NParams} ->
+                                    Response = apply_callback(NRequest, NParams, Handler),
+                                    {StatusCode, NRequest1} = reply(Response, NRequest, Handler),
+                                    {
+                                        StatusCode,
+                                        NRequest1,
+                                        maps:merge(NParams, Meta)
+                                    };
+                                FilterErr ->
+                                    {StatusCode, NRequest} = reply(FilterErr, Request, Handler),
+                                    {StatusCode, NRequest, maps:merge(Params, Meta)}
+                            end;
+                        ParseErr ->
+                            {StatusCode, NRequest} = reply(ParseErr, Request, Handler),
+                            {StatusCode, NRequest, Meta}
+                    end;
+                AuthFailed ->
+                    {StatusCode, NRequest} = reply(AuthFailed, Request, Handler),
+                    {StatusCode, NRequest, InitMeta}
+            end
     end.
 
 allow_method_header(Allow) ->
@@ -52,53 +77,40 @@ trans_allow([Method], Res) -> <<Res/binary, Method/binary>>;
 trans_allow([Method | Allow], Res) ->
     trans_allow(Allow, <<Res/binary, Method/binary, ", ">>).
 
-do_auth(Request, Handler = #handler{authorization = {M, F}}) ->
-    case erlang:apply(M, F, [Request]) of
-        ok ->
-            do_parse_params(Request, Handler);
-        Response when is_tuple(Response) ->
-            Response;
-        _ ->
-            {?RESPONSE_CODE_UNAUTHORIZED}
-    end;
+do_authorize(Request, #handler{authorization = {M, F}}) ->
+    erlang:apply(M, F, [Request]);
+do_authorize(_Request, _Handler) ->
+    {ok, #{}}.
 
-do_auth(Request, Handler) ->
-    do_parse_params(Request, Handler).
-
-do_parse_params(Request, Handler) ->
+do_parse_params(Request) ->
     Params = #{
         bindings => cowboy_req:bindings(Request),
         query_string => maps:from_list(cowboy_req:parse_qs(Request)),
         headers => cowboy_req:headers(Request),
         body => #{}
     },
-    do_read_body(Request, Params, Handler).
+    do_read_body(Request, Params).
 
-do_read_body(Request, Params, Handler) ->
+do_read_body(Request, Params) ->
     case cowboy_req:has_body(Request) of
         true ->
             case minirest_body:parse(Request) of
                 {ok, Body, NRequest} ->
-                    do_filter(NRequest, Params#{body => Body}, Handler);
+                    {ok, Params#{body => Body}, NRequest};
                 {response, Response} ->
                     Response
             end;
         false ->
-            do_filter(Request, Params, Handler)
+            {ok, Params, Request}
     end.
 
-do_filter(Request, Params, #handler{filter = Filter,
-                                    path = Path,
+do_validate_params(Params, #handler{filter = Filter,
+                                    path   = Path,
                                     module = Mod,
-                                    method = Method} = Handler) when is_function(Filter, 2) ->
-    case Filter(Params, #{path => Path, module => Mod, method => Method}) of
-        {ok, NewParams} ->
-            apply_callback(Request, NewParams, Handler);
-        Response ->
-            Response
-    end;
-do_filter(Request, Params, Handler) ->
-    apply_callback(Request, Params, Handler).
+                                    method = Method}) when is_function(Filter, 2) ->
+    Filter(Params, #{path => Path, module => Mod, method => Method});
+do_validate_params(Params, _Handler) ->
+    {ok, Params}.
 
 apply_callback(Request, Params, Handler) ->
     #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
@@ -141,15 +153,15 @@ reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes}
 
 %% response simple
 reply(StatusCode, Req, _Handler) when is_integer(StatusCode) ->
-    cowboy_req:reply(StatusCode, Req);
+    {StatusCode, cowboy_req:reply(StatusCode, Req)};
 
 reply({StatusCode}, Req, _Handler) ->
-    cowboy_req:reply(StatusCode, Req);
+    {StatusCode, cowboy_req:reply(StatusCode, Req)};
 
 reply({StatusCode, Body0}, Req, Handler) ->
     case minirest_body:encode(Body0) of
         {ok, Headers, Body} ->
-            reply_with_body(StatusCode, Headers, Body, Req);
+            {StatusCode, reply_with_body(StatusCode, Headers, Body, Req)};
         {response, Response} ->
             reply(Response, Req, Handler)
     end;
@@ -157,7 +169,7 @@ reply({StatusCode, Body0}, Req, Handler) ->
 reply({StatusCode, Headers, Body0}, Req, Handler) ->
     case minirest_body:encode(Body0) of
         {ok, Headers1, Body} ->
-            reply_with_body(StatusCode, maps:merge(Headers1, Headers), Body, Req);
+            {StatusCode, reply_with_body(StatusCode, maps:merge(Headers1, Headers), Body, Req)};
         {response, Response} ->
             reply(Response, Req, Handler)
     end;
@@ -165,7 +177,7 @@ reply({StatusCode, Headers, Body0}, Req, Handler) ->
 reply(BadReturn, Req, _Handler) ->
     StatusCode = ?RESPONSE_CODE_INTERNAL_SERVER_ERROR,
     Body = io_lib:format("mini rest bad return ~p", [BadReturn]),
-    cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req).
+    {StatusCode, cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req)}.
 
 reply_with_body(StatusCode, Headers, Body, Req) when is_binary(Body) ->
         cowboy_req:reply(StatusCode, Headers, Body, Req);
@@ -185,3 +197,10 @@ maybe_ignore_code_check(401, _Code) -> true;
 maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
 maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
 maybe_ignore_code_check(_, _) -> false.
+
+run_log_hook(#{log := Log} = Meta0, ReqStart, ReqEnd, Code) when is_function(Log) ->
+    Meta = maps:without([log], Meta0),
+    _ = Log(Meta#{req_start => ReqStart, req_end => ReqEnd, code => Code}),
+    ok;
+run_log_hook(_Meta, _ReqStart, _ReqEnd, _Code) ->
+    ok.
