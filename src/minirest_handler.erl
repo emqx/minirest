@@ -182,6 +182,7 @@ reply_with_body(StatusCode, Headers, {qlc_handle, _} = BodyQH, Req0) ->
     Req1.
 
 maybe_ignore_code_check(401, _Code) -> true;
+maybe_ignore_code_check(403, _Code) -> true;
 maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
 maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
 maybe_ignore_code_check(_, _) -> false.
