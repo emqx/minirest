@@ -30,6 +30,8 @@
         , return_file/1
         ]).
 
+-export([put_return/1]).
+
 %% Cowboy callback
 -export([init/2]).
 
@@ -127,8 +129,17 @@ handler(Config) -> minirest_handler:init(Config).
 %% Cowboy callbacks
 %%------------------------------------------------------------------------------
 
-init(Req, Opts) ->
+init(Req, Opts = [Handler|_]) ->
+    Start = erlang:monotonic_time(),
     Req1 = handle_request(Req, Opts),
+    End = erlang:monotonic_time(),
+    DurationMs = erlang:convert_time_unit(End - Start, native, millisecond),
+    case maps:find(logger, maps:get(options, Handler)) of
+        {ok, Logger} ->
+            Req2 = minirest_utils:redact(Req1),
+            Logger(maps:put(duration_ms, DurationMs, get_return()), Req2);
+        _ -> ok
+    end,
     {ok, Req1, Opts}.
 
 %% Callback
@@ -236,3 +247,9 @@ format_msg(Message) when is_binary(Message) ->
     Message;
 format_msg(Message) ->
     iolist_to_binary(io_lib:format("~0p", [Message])).
+
+put_return(Return) ->
+    erlang:put(minirest_return, Return).
+
+get_return() ->
+    erlang:get(minirest_return).

@@ -65,4 +65,6 @@ is_sensitive_key(<<"secret_key">>) -> true;
 is_sensitive_key(bind_password) -> true;
 is_sensitive_key("bind_password") -> true;
 is_sensitive_key(<<"bind_password">>) -> true;
+is_sensitive_key(<<"authorization">>) -> true;
+is_sensitive_key(authorization) -> true;
 is_sensitive_key(_) -> false.

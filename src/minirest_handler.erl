@@ -49,8 +49,12 @@ routes(App, Config, Modules) ->
 dispatch("/", Req, Routes, _Filter) ->
     case binary_to_atom(cowboy_req:method(Req), utf8) of
         'GET' ->
-            jsonify(200, #{code => 0, data => [format_route(Route) || Route <- Routes]}, Req);
+            minirest:put_return(#{status => 200, code => 0}),
+            {_StatusCode, _Response, Req1} =
+            jsonify(200, #{code => 0, data => [format_route(Route) || Route <- Routes]}, Req),
+            Req1;
         _ ->
+            minirest:put_return(#{status => 400, message => <<"Bad Request">>}),
             reply(400, <<"Bad Request">>, Req)
     end;
 
@@ -60,9 +64,11 @@ dispatch(Path, Req, Routes, Filter) ->
         {ok, Route} ->
             dispatch(Req, Route, Filter);
         false ->
+            minirest:put_return(#{status => 404, message => <<"Not found.">>}),
             reply(404, <<"Not found.">>, Req)
     catch
         _Error:_Reason ->
+            minirest:put_return(#{status => 404, message => <<"Not found.">>}),
             reply(404, <<"Not found.">>, Req)
     end.
 
@@ -72,25 +78,61 @@ dispatch(Req, Route, undefined) ->
 dispatch(Req, Route, {Mod, Fun}) ->
     case erlang:apply(Mod, Fun, [Route]) of
         true -> dispatch(Req, Route);
-        false -> reply(404, <<"Not found.">>, Req)
+        false ->
+            #{pattern := [Type|_], name := Name} = Route,
+            minirest:put_return(#{
+                status => 404,
+                message => <<"Not found.">>,
+                operation_type => Type,
+                operation_name => Name}),
+            reply(404, <<"Not found.">>, Req)
     end;
 
 dispatch(Req, Route, Filter) ->
     case Filter(Route) of
         true -> dispatch(Req, Route);
-        false -> reply(404, <<"Not found.">>, Req)
+        false ->
+            #{pattern := [Type|_], name := Name} = Route,
+            minirest:put_return(#{
+                status => 404,
+                message => <<"Not found.">>,
+                operation_type => Type,
+                operation_name => Name}),
+            reply(404, <<"Not found.">>, Req)
     end.
 
-dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings}) ->
+dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings} = Route) ->
     case catch parse_params(Req) of
         {'EXIT', Reason} ->
+            #{pattern := [Type|_], name := Name} = Route,
             logger:error("[minirest] Params error: ~p", [minirest_utils:redact(Reason)]),
+            minirest:put_return(minirest_utils:redact(
+                #{
+                    status => 400,
+                    message => <<"Parse pararms failed.">>,
+                    bindings => Bindings,
+                    operation_type => Type,
+                    operation_name => Name
+                })),
             reply(400, <<"Bad Request">>, Req);
         Params ->
             case erlang:apply(Mod, Fun, [Bindings, Params]) of
                 {file, Headers, {sendfile, _, _, _} = SendFile} ->
-                    cowboy_req:reply(200, Headers, SendFile, Req);
-                Return -> jsonify(Return, Req)
+                    Req1 = cowboy_req:reply(200, Headers, SendFile, Req),
+                    #{pattern := [Type|_], name := Name} = Route,
+                    minirest:put_return(
+                        minirest_utils:redact(#{status => 200, code => 0, return => SendFile,
+                        bindings => Bindings, params => Params,
+                        operation_type => Type, operation_name => Name})),
+                    Req1;
+                Return ->
+                    {StatusCode, Response, Req1} = jsonify(Return, Req),
+                    #{pattern := [Type|_], name := Name} = Route,
+                    minirest:put_return(
+                        minirest_utils:redact(Response#{status => StatusCode, return => Return,
+                        bindings => Bindings, params => Params,
+                        operation_type => Type, operation_name => Name})),
+                    Req1
             end
     end.
 
@@ -151,7 +193,7 @@ jsonify(ok, Req) ->
 jsonify({ok, Response}, Req) ->
     jsonify(200, Response, Req);
 jsonify({ok, Headers, Response}, Req) ->
-    cowboy_req:reply(200, Headers, Response, Req);
+    {200, <<"">>, cowboy_req:reply(200, Headers, Response, Req)};
 jsonify({error, Reason}, Req) ->
     jsonify(500, Reason, Req);
 jsonify({Code, Response}, Req) when is_integer(Code) ->
@@ -164,10 +206,16 @@ jsonify(Code, Response, Req) ->
 jsonify(Code, Headers, Response, Req) ->
     try json_encode(Response) of
         Json ->
-            cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req)
+            Req1 = cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req),
+            case Code of
+                200 -> {200, #{}, Req1};
+                _ -> {Code, Response, Req1}
+            end
     catch
         error:Reason:_Stacktrace ->
-            ?LOG(error, "Encode ~p failed with ~p", [Response, Reason])
+            ?LOG(error, "Encode ~p failed with ~p", [Response, Reason]),
+            Req1 = cowboy_req:reply(500, <<"Encode response failed, please look at emqx log">>, Req),
+            {500, #{message => <<"Encode response failed">>}, Req1}
     end.
 
 reply(Code, Text, Req) ->
