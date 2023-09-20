@@ -30,6 +30,8 @@
         , return_file/1
         ]).
 
+-export([put_return/1]).
+
 %% Cowboy callback
 -export([init/2]).
 
@@ -127,8 +129,17 @@ handler(Config) -> minirest_handler:init(Config).
 %% Cowboy callbacks
 %%------------------------------------------------------------------------------
 
-init(Req, Opts) ->
+init(Req, Opts = [Handler|_]) ->
+    Start = erlang:monotonic_time(),
     Req1 = handle_request(Req, Opts),
+    End = erlang:monotonic_time(),
+    DurationMs = erlang:convert_time_unit(End - Start, native, millisecond),
+    case maps:find(logger, maps:get(options, Handler)) of
+        {ok, Logger} ->
+            Req2 = minirest_utils:redact(Req1),
+            Logger(maps:put(duration_ms, DurationMs, get_return()), Req2);
+        _ -> ok
+    end,
     {ok, Req1, Opts}.
 
 %% Callback
@@ -162,8 +173,12 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := {Mod,
     case erlang:apply(Mod, Fun, [Req]) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
+            minirest:put_return(#{status => 401, message => <<"UNAUTHORIZED">>}),
             cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req);
+        {error, permission_deny, ResponseBody} ->
+            minirest:put_return(ResponseBody#{status => 200}),
+            cowboy_req:reply(200, #{}, jiffy:encode(ResponseBody), Req);
         {error, {lock_user, ResponseBody}} ->
             cowboy_req:reply(401, #{}, ResponseBody, Req)
     end;
@@ -172,8 +187,12 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthF
     case AuthFun(Req) of
         true  -> apply_handler(Req, Path, MFArgs);
         false ->
+            minirest:put_return(#{status => 401, message => <<"UNAUTHORIZED">>}),
             cowboy_req:reply(401, #{<<"WWW-Authenticate">> => <<"Basic Realm=\"minirest-server\"">>},
                              <<"UNAUTHORIZED">>, Req);
+        {error, permission_deny, ResponseBody} ->
+            minirest:put_return(ResponseBody#{status => 200}),
+            cowboy_req:reply(200, #{}, jiffy:encode(ResponseBody), Req);
         {error, {lock_user, ResponseBody}} ->
             cowboy_req:reply(401, #{}, ResponseBody, Req)
     end;
@@ -236,3 +255,9 @@ format_msg(Message) when is_binary(Message) ->
     Message;
 format_msg(Message) ->
     iolist_to_binary(io_lib:format("~0p", [Message])).
+
+put_return(Return) ->
+    erlang:put(minirest_return, Return).
+
+get_return() ->
+    erlang:get(minirest_return).
