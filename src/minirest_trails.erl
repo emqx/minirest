@@ -47,20 +47,21 @@ modules(Options) ->
 trails_schemas(Options, ModuleApiSpecList) ->
     BasePath = maps:get(base_path, Options, undefined),
     Authorization = maps:get(authorization, Options, undefined),
+    Log = maps:get(log, Options, undefined),
     Fun =
         fun(ModuleApiSpec, {Trails, Schemas}) ->
-            {Trails0, Schemas0} = trails_schemas(BasePath, Authorization, ModuleApiSpec),
+            {Trails0, Schemas0} = trails_schemas(BasePath, Authorization, Log, ModuleApiSpec),
             {lists:append(Trails, Trails0), lists:append(Schemas, Schemas0)}
         end,
     lists:foldl(Fun, {[], []}, ModuleApiSpecList).
 
-trails_schemas(BasePath, Authorization, {Module, {Apis, Schemas}}) ->
-    Trails = [trails_schemas(BasePath, Authorization, Module, Api) || Api <- Apis],
+trails_schemas(BasePath, Authorization, Log, {Module, {Apis, Schemas}}) ->
+    Trails = [trails_schemas(BasePath, Authorization, Log, Module, Api) || Api <- Apis],
     {Trails, Schemas}.
 
-trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function}) ->
-    trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, #{}});
-trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Options}) ->
+trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function}) ->
+    trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, #{}});
+trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, Options}) ->
     Fun =
         fun(Method, MethodDef, HandlerStates) ->
             #{responses := Responses} = MethodDef,
@@ -72,6 +73,7 @@ trails_schemas(BasePath, Authorization, Module, {Path, Metadata, Function, Optio
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
                 filter        = maps:get(filter, Options, undefined),
+                log           = Log,
                 error_codes   = ErrorCodes
                 },
             minirest_info_api:add_codes(ErrorCodes),
