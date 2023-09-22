@@ -56,16 +56,16 @@ handle(Request, State) ->
                                         maps:merge(NParams, Meta)
                                     };
                                 FilterErr ->
-                                    {StatusCode, NRequest} = reply(FilterErr, Request, Handler),
-                                    {StatusCode, NRequest, maps:merge(Params, Meta)}
+                                    {StatusCode, NRequest1} = reply(FilterErr, Request, Handler),
+                                    {StatusCode, NRequest1, maps:merge(Params, Meta)}
                             end;
                         ParseErr ->
-                            {StatusCode, NRequest} = reply(ParseErr, Request, Handler),
-                            {StatusCode, NRequest, Meta}
+                            {StatusCode, NRequest1} = reply(ParseErr, Request, Handler),
+                            {StatusCode, NRequest1, Meta}
                     end;
                 AuthFailed ->
-                    {StatusCode, NRequest} = reply(AuthFailed, Request, Handler),
-                    {StatusCode, NRequest, InitMeta}
+                    {StatusCode, NRequest1} = reply(AuthFailed, Request, Handler),
+                    {StatusCode, NRequest1, InitMeta}
             end
     end.
 
