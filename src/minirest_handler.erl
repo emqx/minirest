@@ -26,7 +26,7 @@ init(Request0, State)->
     ReqStart = erlang:monotonic_time(),
     {Code, Request1, Meta} = handle(Request0, State),
     ReqEnd = erlang:monotonic_time(),
-    run_log_hook(Meta, ReqStart, ReqEnd, Code),
+    run_log_hook(Meta, ReqStart, ReqEnd, Code, Request1),
     {ok, Request1, State}.
 
 %%%==============================================================================================
@@ -38,9 +38,14 @@ handle(Request, State) ->
             StatusCode = ?RESPONSE_CODE_METHOD_NOT_ALLOWED,
             Headers = allow_method_header(maps:keys(State)),
             Meta = Headers#{method => binary_to_existing_atom(Method)},
-            {StatusCode, cowboy_req:reply(StatusCode, Headers, <<"">>, Request), Meta};
+            {
+                StatusCode,
+                cowboy_req:reply(StatusCode, Headers, <<"">>, Request),
+                Meta,
+                #{code => 'METHOD_NOT_ALLOWED'}
+            };
         {ok, Handler = #handler{path = Path, log = Log, method = MethodAtom}} ->
-            InitMeta = #{operate_id => Path, log => Log, method => MethodAtom},
+            InitMeta = #{operation_id => list_to_binary(Path), log => Log, method => MethodAtom},
             case do_authorize(Request, Handler) of
                 {ok, AuthMeta} ->
                     Meta = maps:merge(InitMeta, AuthMeta),
@@ -57,17 +62,26 @@ handle(Request, State) ->
                                     };
                                 FilterErr ->
                                     {StatusCode, NRequest1} = reply(FilterErr, Request, Handler),
-                                    {StatusCode, NRequest1, maps:merge(Params, Meta)}
+                                    {StatusCode, NRequest1, maps:merge(Params#{failure => failed_meta(FilterErr)}, Meta)}
                             end;
                         ParseErr ->
                             {StatusCode, NRequest1} = reply(ParseErr, Request, Handler),
-                            {StatusCode, NRequest1, Meta}
+                            {StatusCode, NRequest1, Meta#{failure => failed_meta(ParseErr)}}
                     end;
                 AuthFailed ->
                     {StatusCode, NRequest1} = reply(AuthFailed, Request, Handler),
-                    {StatusCode, NRequest1, InitMeta}
+                    {StatusCode, NRequest1, InitMeta#{failure => failed_meta(AuthFailed)}}
             end
     end.
+
+
+failed_meta({Code, #{} = Meta}) when is_integer(Code) -> Meta;
+failed_meta({Code, _Header, #{} = Meta}) when is_integer(Code) -> Meta;
+failed_meta({_, Code, Message}) when is_atom(Code) ->
+    #{code => Code, message => Message};
+%% parse body failed
+failed_meta({response, {?RESPONSE_CODE_BAD_REQUEST, Error}}) ->
+    Error.
 
 allow_method_header(Allow) ->
     #{<<"allow">> => trans_allow(Allow, <<"">>)}.
@@ -199,9 +213,9 @@ maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
 maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
 maybe_ignore_code_check(_, _) -> false.
 
-run_log_hook(#{log := Log} = Meta0, ReqStart, ReqEnd, Code) when is_function(Log) ->
+run_log_hook(#{log := Log} = Meta0, ReqStart, ReqEnd, Code, Req) when is_function(Log) ->
     Meta = maps:without([log], Meta0),
-    _ = Log(Meta#{req_start => ReqStart, req_end => ReqEnd, code => Code}),
+    _ = Log(Meta#{req_start => ReqStart, req_end => ReqEnd, code => Code}, Req),
     ok;
-run_log_hook(_Meta, _ReqStart, _ReqEnd, _Code) ->
+run_log_hook(_Meta, _ReqStart, _ReqEnd, _Code, _Req) ->
     ok.
