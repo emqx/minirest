@@ -180,6 +180,7 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := {Mod,
             minirest:put_return(ResponseBody#{status => 200}),
             cowboy_req:reply(200, #{}, jiffy:encode(ResponseBody), Req);
         {error, {lock_user, ResponseBody}} ->
+            minirest:put_return(#{status => 401}),
             cowboy_req:reply(401, #{}, ResponseBody, Req)
     end;
 
@@ -194,6 +195,7 @@ apply_handler(Req, Path, #{mfargs := MFArgs, options := #{authorization := AuthF
             minirest:put_return(ResponseBody#{status => 200}),
             cowboy_req:reply(200, #{}, jiffy:encode(ResponseBody), Req);
         {error, {lock_user, ResponseBody}} ->
+            minirest:put_return(#{status => 401}),
             cowboy_req:reply(401, #{}, ResponseBody, Req)
     end;
 
