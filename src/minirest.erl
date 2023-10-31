@@ -206,12 +206,14 @@ apply_handler(Req, Path, {M, F, Args}) ->
     erlang:apply(M, F, [Path, Req | Args]).
 
 internal_error(Req, Error, Stacktrace) ->
+    minirest:put_return(#{status => 500, message => <<"INTERNAL ERROR">>}),
     logger:error("[minirest] ~s ~s error: ~p, stacktrace:~n~p",
         [cowboy_req:method(Req), cowboy_req:path(Req),
          minirest_utils:redact(Error), minirest_utils:redact(Stacktrace)]),
     cowboy_req:reply(500, #{<<"content-type">> => <<"text/plain">>}, <<"Internal Error">>, Req).
 
 badarg_error(Req, Error) ->
+    minirest:put_return(#{status => 400, message => <<"BADARG">>}),
     logger:error("[minirest] ~s ~s error: ~p",
         [cowboy_req:method(Req), cowboy_req:path(Req), minirest_utils:redact(Error)]),
     cowboy_req:reply(400, #{<<"content-type">> => <<"text/plain">>}, ?ERROR_MSG(Error), Req).
@@ -262,4 +264,7 @@ put_return(Return) ->
     erlang:put(minirest_return, Return).
 
 get_return() ->
-    erlang:get(minirest_return).
+    case erlang:get(minirest_return) of
+        undefined -> #{};
+        Return -> Return
+    end.
