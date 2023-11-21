@@ -68,27 +68,30 @@ forma_data_decoder(Request) ->
     forma_data_decoder(Request, #{}).
 
 forma_data_decoder(Request, Body) ->
-    case loop_form(Request) of
-        {done, NRequest} ->
-            {ok, Body, NRequest};
-        {Part, NRequest} ->
-            forma_data_decoder(NRequest, maps:merge(Body, Part))
+    case loop_form(Request, Body) of
+        {done, Body1, NRequest} ->
+            {ok, Body1, NRequest};
+        {Body1, NRequest} ->
+            forma_data_decoder(NRequest, Body1)
     end.
 
-loop_form(Request) ->
+loop_form(Request, Body) ->
     case cowboy_req:read_part(Request) of
         {ok, PartHeader, Request1} ->
             {ok, Data, Request2} = read_body(Request1, <<>>),
             case cow_multipart:form_data(PartHeader) of
                 {data, FieldName} ->
-                    {#{FieldName => Data}, Request2};
+                    {Body#{FieldName => Data}, Request2};
                 {file, FieldName, FileName, Type} ->
-                    {#{FieldName => #{
-                        type => Type,
-                        FileName => Data}}, Request2}
+                    Body1 = maps:update_with(
+                              FieldName,
+                              fun(Files) -> Files#{FileName => Data} end,
+                              #{type => Type, FileName => Data},
+                              Body),
+                    {Body1, Request2}
             end;
         {done, Request1} ->
-            {done, Request1}
+            {done, Body, Request1}
     end.
 
 read_body(Request, Acc) ->
