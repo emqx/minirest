@@ -26,7 +26,8 @@
 all() ->
     [
         t_lazy_body,
-        t_binary_body
+        t_binary_body,
+        t_flex_error
     ].
 
 init_per_suite(Config) ->
@@ -61,8 +62,12 @@ t_binary_body(_Config) ->
        {ok, {{_Version, 200, _Status}, _Headers, "alldataatonce"}},
        httpc:request(address() ++ "/binary_body")).
 
+t_flex_error(_Config) ->
+    {ok, {{_Version, 400, _Status}, _Headers, Body}} =
+       httpc:request(address() ++ "/flex_error"),
+    ?assertMatch(
+       #{<<"code">> := _, <<"message">> := _, <<"hint">> := _},
+       jsx:decode(iolist_to_binary(Body), [return_maps])).
+
 address() ->
     "http://localhost:" ++ integer_to_list(?PORT).
-
-
-

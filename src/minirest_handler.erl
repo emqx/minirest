@@ -145,16 +145,21 @@ apply_callback(Request, Params, Handler) ->
     end.
 
 %% response error
-reply({ErrorStatus, #{code := Code, message := Message}}, Req, Handler)
+reply({ErrorStatus, #{code := Code, message := Message} = Resp}, Req, Handler)
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code) ->
-    reply({ErrorStatus, Code, Message}, Req, Handler);
-reply({ErrorStatus, Code, Message}, Req, Handler = #handler{error_codes = Codes})
+    Other = maps:without([code, message], Resp),
+    reply({ErrorStatus, Code, Message, Other}, Req, Handler);
+reply({ErrorStatus, Code, Message}, Req, Handler)
   when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
   andalso is_atom(Code) ->
+    reply({ErrorStatus, Code, Message, _Other = #{}}, Req, Handler);
+reply({ErrorStatus, Code, Message, Other}, Req, Handler = #handler{error_codes = Codes})
+  when (ErrorStatus < 200 orelse 300 =< ErrorStatus)
+  andalso is_atom(Code) andalso is_map(Other) ->
     case maybe_ignore_code_check(ErrorStatus, Code) orelse lists:member(Code, Codes) of
         true ->
-            ErrorMessageStruct = {message, #{code => Code, message => Message}},
+            ErrorMessageStruct = {message, Other#{code => Code, message => Message}},
             {ok, Headers, Body} = minirest_body:encode(ErrorMessageStruct),
             reply({ErrorStatus, Headers, Body}, Req, Handler);
         false ->
