@@ -20,12 +20,14 @@
 -export([api_spec/0]).
 
 -export([lazy_body/2,
-         binary_body/2]).
+         binary_body/2,
+         flex_error/2]).
 
 api_spec() ->
   {
     [lazy_body(),
-     binary_body()],
+     binary_body(),
+     flex_error()],
     []
   }.
 
@@ -55,6 +57,19 @@ binary_body() ->
                 },
   {"/binary_body", MetaData, binary_body}.
 
+flex_error() ->
+  MetaData = #{
+    get => #{
+      description => "binary body",
+      responses => #{
+      <<"400">> => #{
+          content => #{
+            'application/json' => #{
+                  schema => #{
+                      type => string}}}}}}
+    },
+  {"/flex_error", MetaData, flex_error}.
+
 lazy_body(get, _) ->
     BodyQH = qlc:table(fun() -> [<<"first">>, <<"second">>] end, []),
     {200, #{<<"content-type">> => <<"test/plain">>}, BodyQH}.
@@ -63,3 +78,5 @@ binary_body(get, _) ->
     Body = <<"alldataatonce">>,
     {200, #{<<"content-type">> => <<"test/plain">>}, Body}.
 
+flex_error(get, _) ->
+    {400, #{message => <<"boom">>, code => 'BAD_REQUEST', hint => <<"something went wrong">>}}.
