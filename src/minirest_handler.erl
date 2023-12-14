@@ -166,7 +166,7 @@ reply({ErrorStatus, Code, Message, Other}, Req, Handler = #handler{error_codes =
             NewMessage =
                 list_to_binary(
                     io_lib:format(
-                        "not support code ~p, message ~p, schema def ~p", [Code, Message, Codes])),
+                        "Unsupported code ~p, message ~p, schema def ~p", [Code, Message, Codes])),
             reply({500, NewMessage}, Req, Handler)
     end;
 
