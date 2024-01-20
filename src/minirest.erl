@@ -33,7 +33,8 @@ start(Name, RanchOptions, Options) ->
     CowboyOptions = middlewares(Options,
         ProtoOpts#{
                    env => #{dispatch => {persistent_term, Name},
-                            options => Options#{name => Name}}
+                            options => Options#{name => Name}},
+                   stream_handlers => stream_handlers(Options)
                   }),
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
@@ -84,6 +85,16 @@ middlewares(#{middlewares := [cowboy_router, cowboy_handler]}, CowboyOptions) ->
 middlewares(#{middlewares := Middlewares}, CowboyOptions) when is_list(Middlewares) ->
     maps:put(middlewares, Middlewares, CowboyOptions);
 middlewares(_, CowboyOptions) -> CowboyOptions.
+
+stream_handlers(Options) ->
+    case maps:get(stream_handlers, Options, undefined) of
+        Handlers when is_list(Handlers) ->
+            case lists:last(Handlers) of
+                cowboy_stream_h -> Handlers;
+                _ -> Handlers ++ [cowboy_stream_h]
+            end;
+        _ -> [cowboy_stream_h]
+    end.
 
 start_listener(http, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_clear, Name, TransOpts, CowboyOptions);
