@@ -21,13 +21,15 @@
 
 -export([lazy_body/2,
          binary_body/2,
-         flex_error/2]).
+         flex_error/2,
+         qs_params/2]).
 
 api_spec() ->
   {
     [lazy_body(),
      binary_body(),
-     flex_error()],
+     flex_error(),
+     qs_params()],
     []
   }.
 
@@ -57,6 +59,20 @@ binary_body() ->
                 },
   {"/binary_body", MetaData, binary_body}.
 
+
+qs_params() ->
+    MetaData = #{
+        get => #{
+            description => "parse QS params",
+            responses => #{
+            <<"200">> => #{
+                content => #{
+                  'text/plain' => #{
+                        schema => #{
+                            type => string}}}}}}
+                },
+  {"/qs_params", MetaData, qs_params}.
+
 flex_error() ->
   MetaData = #{
     get => #{
@@ -77,6 +93,10 @@ lazy_body(get, _) ->
 binary_body(get, _) ->
     Body = <<"alldataatonce">>,
     {200, #{<<"content-type">> => <<"test/plain">>}, Body}.
+
+qs_params(get, #{query_string := Qs}) ->
+    #{<<"single">> := <<"foo">>, <<"array">> := [<<"bar">>, <<"foo">>]} = Qs,
+    {200,  #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 flex_error(get, _) ->
     {400, #{message => <<"boom">>, code => 'BAD_REQUEST', hint => <<"something went wrong">>}}.
