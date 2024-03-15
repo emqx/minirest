@@ -99,11 +99,26 @@ do_authorize(_Request, _Handler) ->
 do_parse_params(Request) ->
     Params = #{
         bindings => cowboy_req:bindings(Request),
-        query_string => maps:from_list(cowboy_req:parse_qs(Request)),
+        query_string => parse_qs(Request),
         headers => cowboy_req:headers(Request),
         body => #{}
     },
     do_read_body(Request, Params).
+
+parse_qs(Request) ->
+    lists:foldl(
+      fun({K, V}, MapAcc) ->
+              maps:update_with(
+                K,
+                fun([_|_] = OldV) -> [V | OldV];
+                   (OldV) -> [V, OldV]
+                end,
+                V,
+                MapAcc)
+      end,
+      #{},
+      cowboy_req:parse_qs(Request)
+     ).
 
 do_read_body(Request, Params) ->
     case cowboy_req:has_body(Request) of

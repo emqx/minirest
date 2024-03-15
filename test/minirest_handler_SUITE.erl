@@ -27,7 +27,8 @@ all() ->
     [
         t_lazy_body,
         t_binary_body,
-        t_flex_error
+        t_flex_error,
+        t_qs_params
     ].
 
 init_per_suite(Config) ->
@@ -68,6 +69,12 @@ t_flex_error(_Config) ->
     ?assertMatch(
        #{<<"code">> := _, <<"message">> := _, <<"hint">> := _},
        jsx:decode(iolist_to_binary(Body), [return_maps])).
+
+t_qs_params(_Config) ->
+    ?assertMatch(
+       {ok, {{_Version, 200, _Status}, _Headers, "OK"}},
+       httpc:request(address() ++ "/qs_params?single=foo&array=foo&array=bar")
+      ).
 
 address() ->
     "http://localhost:" ++ integer_to_list(?PORT).
