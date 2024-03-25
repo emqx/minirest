@@ -116,7 +116,11 @@ dispatch(Req, #{module := Mod, func := Fun, bindings := Bindings} = Route) ->
                 })),
             reply(400, <<"Bad Request">>, Req);
         Params ->
-            case erlang:apply(Mod, Fun, [Bindings, Params]) of
+            Params1 = case maps:get(with_cowboy_req, Route, false) of
+                true -> [Bindings, Params, Req];
+                false -> [Bindings, Params]
+            end,
+            case erlang:apply(Mod, Fun, Params1) of
                 {file, Headers, {sendfile, _, _, _} = SendFile} ->
                     Req1 = cowboy_req:reply(200, Headers, SendFile, Req),
                     #{pattern := [Type|_], name := Name} = Route,
