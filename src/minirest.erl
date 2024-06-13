@@ -26,9 +26,8 @@ start(Name, Options) ->
     start(Name, ranch_opts(Options), maps:without([ranch_options], Options)).
 
 start(Name, RanchOptions, Options) ->
+    init_dispatch(Name, Options),
     Protocol = maps:get(protocol, Options, http),
-    Dispatch = merge_dispatch([], Options),
-    persistent_term:put(Name, Dispatch),
     ProtoOpts = maps:get(protocol_options, Options, #{}),
     CowboyOptions = middlewares(Options,
         ProtoOpts#{
@@ -36,6 +35,17 @@ start(Name, RanchOptions, Options) ->
                             options => Options#{name => Name}}
                   }),
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
+
+%% Because it is too slow to generate a fully new dispatch rules in update_dispatch/1.
+%% This cache allows the listener to find the complete dispatch rules ASAP.
+%% eg. emqx restarts the listener when the cluster join/leave.
+init_dispatch(Name, Options) ->
+    case persistent_term:get(Name, undefined) of
+        undefined ->
+            Dispatch = merge_dispatch([], Options),
+            persistent_term:put(Name, Dispatch);
+        _ -> ok
+    end.
 
 update_dispatch(Name) ->
     [Name, _Transport, _SocketOpts, _Protocol, StartArgs]
