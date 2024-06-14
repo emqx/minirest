@@ -18,6 +18,7 @@
         , start/3
         , stop/1
         , update_dispatch/1
+        , generate_dispatch/1
         , ref/1]).
 
 -include("minirest.hrl").
@@ -31,14 +32,11 @@ start(Name, RanchOptions, Options) ->
     ProtoOpts = maps:get(protocol_options, Options, #{}),
     CowboyOptions = middlewares(Options,
         ProtoOpts#{
-                   env => #{dispatch => {persistent_term, Name},
-                            options => Options#{name => Name}}
-                  }),
+            env => #{dispatch => {persistent_term, Name},
+                options => Options#{name => Name}}
+        }),
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
-%% Because it is too slow to generate a fully new dispatch rules in update_dispatch/1.
-%% This cache allows the listener to find the complete dispatch rules ASAP.
-%% eg. emqx restarts the listener when the cluster join/leave.
 init_dispatch(Name, Options) ->
     case persistent_term:get(Name, undefined) of
         undefined ->
@@ -51,18 +49,29 @@ update_dispatch(Name) ->
     [Name, _Transport, _SocketOpts, _Protocol, StartArgs]
         = ranch_server:get_listener_start_args(Name),
     #{env := #{options := Options}} = StartArgs,
-    [{_Host0, _CowField0, Routers0}] = merge_dispatch([], Options),
-    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
+    #{
+        dispatch := NewDispatch,
+        schemas := Schemas,
+        trials := Trails
+    } = generate_dispatch(Options),
+    persistent_term:put(Name, NewDispatch),
     SwaggerSupport = maps:get(swagger_support, Options, true),
     SwaggerSupport andalso set_swagger_global_spec(Options),
     SwaggerSupport andalso trails:store(Name, Trails),
     SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
-    [{Host, CowField, RestRouters}] = trails:single_host_compile(Trails),
-    NewDispatch = [{Host, CowField, RestRouters ++ Routers0}],
-    persistent_term:put(Name, NewDispatch),
     Protocol = #{env := Env} = ranch:get_protocol_options(Name),
     ranch:set_protocol_options(Name, Protocol#{env => maps:remove(options, Env)}),
     ok.
+
+generate_dispatch(Options) ->
+    [{_Host0, _CowField0, Routers}] = merge_dispatch([], Options),
+    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
+    [{Host, CowField, RestRouters}] = trails:single_host_compile(Trails),
+    #{
+        dispatch => [{Host, CowField, RestRouters ++ Routers}],
+        schemas => Schemas,
+        trials => Trails
+    }.
 
 stop(Name) ->
     cowboy:stop_listener(Name).
