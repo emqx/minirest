@@ -138,6 +138,12 @@ do_validate_params(Params, #handler{filter = Filter,
                                     module = Mod,
                                     method = Method}) when is_function(Filter, 2) ->
     Filter(Params, #{path => Path, module => Mod, method => Method});
+do_validate_params(Params, Handler = #handler{filter = [Filter | Rest]}) ->
+    case do_validate_params(Params, Handler#handler{filter = Filter}) of
+        {ok, NParams} ->
+            do_validate_params(NParams, Handler#handler{filter = Rest});
+        Error -> Error
+    end;
 do_validate_params(Params, _Handler) ->
     {ok, Params}.
 
