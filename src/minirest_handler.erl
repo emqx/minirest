@@ -16,7 +16,7 @@
 
 -export([init/2]).
 
--export([update_meta/1]).
+-export([update_log_meta/1]).
 
 -include("minirest_http.hrl").
 
@@ -30,7 +30,7 @@ init(Request0, State)->
     ReqStart = erlang:monotonic_time(),
     {Code, Request1} = handle(Request0, State),
     ReqEnd = erlang:monotonic_time(),
-    Meta = get_meta(),
+    Meta = get_log_meta(),
     run_log_hook(Meta, ReqStart, ReqEnd, Code, Request1),
     {ok, Request1, State}.
 
@@ -39,8 +39,8 @@ init(Request0, State)->
 %% or it may be an interactive endpoint whose metadata cannot be determined in one step.
 %% Here, the metadata is moved from the function return to the process dictionary,
 %% so that the metadata in the endpoint can be updated.
-update_meta(New) ->
-    Meta = get_meta(),
+update_log_meta(New) ->
+    Meta = get_log_meta(),
     erlang:put(?META_KEY, maps:merge(Meta, New)).
 
 %%%==============================================================================================
@@ -51,21 +51,21 @@ handle(Request, State) ->
         error ->
             StatusCode = ?RESPONSE_CODE_METHOD_NOT_ALLOWED,
             Headers = allow_method_header(maps:keys(State)),
-            init_meta(Headers#{method => binary_to_existing_atom(Method)}),
+            init_log_meta(Headers#{method => binary_to_existing_atom(Method)}),
             {
                 StatusCode,
                 cowboy_req:reply(StatusCode, Headers, <<"">>, Request)
             };
         {ok, Handler = #handler{path = Path, log = Log, method = MethodAtom}} ->
-            init_meta(#{operation_id => list_to_binary(Path), log => Log, method => MethodAtom}),
+            init_log_meta(#{operation_id => list_to_binary(Path), log => Log, method => MethodAtom}),
             case do_authorize(Request, Handler) of
                 {ok, AuthMeta} ->
-                    update_meta(AuthMeta),
+                    update_log_meta(AuthMeta),
                     case do_parse_params(Request) of
                         {ok, Params, NRequest} ->
                             case do_validate_params(Params, Handler) of
                                 {ok, NParams} ->
-                                    prepend_meta(NParams),
+                                    prepend_log_meta(NParams),
                                     Response = apply_callback(NRequest, NParams, Handler),
                                     {StatusCode, NRequest1} = reply(Response, NRequest, Handler),
                                     {
@@ -73,29 +73,29 @@ handle(Request, State) ->
                                         NRequest1
                                     };
                                 FilterErr ->
-                                    prepend_meta(Params#{failure => failed_meta(FilterErr)}),
+                                    prepend_log_meta(Params#{failure => failed_log_meta(FilterErr)}),
                                     {StatusCode, NRequest1} = reply(FilterErr, Request, Handler),
                                     {StatusCode, NRequest1}
                             end;
                         ParseErr ->
-                            prepend_meta(#{failure => failed_meta(ParseErr)}),                
+                            prepend_log_meta(#{failure => failed_log_meta(ParseErr)}),                
                             {StatusCode, NRequest1} = reply(ParseErr, Request, Handler),
                             {StatusCode, NRequest1}
                     end;
                 AuthFailed ->
-                    prepend_meta(#{failure => failed_meta(AuthFailed)}),                
+                    prepend_log_meta(#{failure => failed_log_meta(AuthFailed)}),                
                     {StatusCode, NRequest1} = reply(AuthFailed, Request, Handler),
                     {StatusCode, NRequest1}
             end
     end.
 
 
-failed_meta({Code, #{} = Meta}) when is_integer(Code) -> Meta;
-failed_meta({Code, _Header, #{} = Meta}) when is_integer(Code) -> Meta;
-failed_meta({_, Code, Message}) when is_atom(Code) ->
+failed_log_meta({Code, #{} = Meta}) when is_integer(Code) -> Meta;
+failed_log_meta({Code, _Header, #{} = Meta}) when is_integer(Code) -> Meta;
+failed_log_meta({_, Code, Message}) when is_atom(Code) ->
     #{code => Code, message => Message};
 %% parse body failed
-failed_meta({response, {?RESPONSE_CODE_BAD_REQUEST, Error}}) ->
+failed_log_meta({response, {?RESPONSE_CODE_BAD_REQUEST, Error}}) ->
     Error.
 
 allow_method_header(Allow) ->
@@ -259,16 +259,16 @@ run_log_hook(#{log := Log} = Meta0, ReqStart, ReqEnd, Code, Req) when is_functio
     Meta = maps:without([log], Meta0),
     _ = Log(Meta#{req_start => ReqStart, req_end => ReqEnd, code => Code}, Req),
     ok;
-run_log_hook(_Meta, _ReqStart, _ReqEnd, _Code, _Req) ->
+run_log_hook(_log_meta, _ReqStart, _ReqEnd, _Code, _Req) ->
     ok.
 
-init_meta(Init) ->
+init_log_meta(Init) ->
     erlang:put(?META_KEY, Init).
 
-get_meta() ->
+get_log_meta() ->
      erlang:get(?META_KEY).
 
-prepend_meta(New) ->
-    Meta = get_meta(),
+prepend_log_meta(New) ->
+    Meta = get_log_meta(),
     erlang:put(?META_KEY, maps:merge(New, Meta)).
 
