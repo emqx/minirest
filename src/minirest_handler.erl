@@ -16,18 +16,32 @@
 
 -export([init/2]).
 
+-export([update_meta/1]).
+
 -include("minirest_http.hrl").
 
 -include("minirest.hrl").
+
+-define(META_KEY, {?MODULE, meta}).
 
 %%==============================================================================================
 %% cowboy callback init
 init(Request0, State)->
     ReqStart = erlang:monotonic_time(),
-    {Code, Request1, Meta} = handle(Request0, State),
+    {Code, Request1} = handle(Request0, State),
     ReqEnd = erlang:monotonic_time(),
+    Meta = get_meta(),
     run_log_hook(Meta, ReqStart, ReqEnd, Code, Request1),
     {ok, Request1, State}.
+
+%% In previous versions, the metadata was statically derived from the `authorize` method, 
+%% but some endpoints may not have an `authorize` method, 
+%% or it may be an interactive endpoint whose metadata cannot be determined in one step.
+%% Here, the metadata is moved from the function return to the process dictionary,
+%% so that the metadata in the endpoint can be updated.
+update_meta(New) ->
+    Meta = get_meta(),
+    erlang:put(?META_KEY, maps:merge(Meta, New)).
 
 %%%==============================================================================================
 %% internal
@@ -37,40 +51,41 @@ handle(Request, State) ->
         error ->
             StatusCode = ?RESPONSE_CODE_METHOD_NOT_ALLOWED,
             Headers = allow_method_header(maps:keys(State)),
-            Meta = Headers#{method => binary_to_existing_atom(Method)},
+            init_meta(Headers#{method => binary_to_existing_atom(Method)}),
             {
                 StatusCode,
-                cowboy_req:reply(StatusCode, Headers, <<"">>, Request),
-                Meta,
-                #{code => 'METHOD_NOT_ALLOWED'}
+                cowboy_req:reply(StatusCode, Headers, <<"">>, Request)
             };
         {ok, Handler = #handler{path = Path, log = Log, method = MethodAtom}} ->
-            InitMeta = #{operation_id => list_to_binary(Path), log => Log, method => MethodAtom},
+            init_meta(#{operation_id => list_to_binary(Path), log => Log, method => MethodAtom}),
             case do_authorize(Request, Handler) of
                 {ok, AuthMeta} ->
-                    Meta = maps:merge(InitMeta, AuthMeta),
+                    update_meta(AuthMeta),
                     case do_parse_params(Request) of
                         {ok, Params, NRequest} ->
                             case do_validate_params(Params, Handler) of
                                 {ok, NParams} ->
+                                    prepend_meta(NParams),
                                     Response = apply_callback(NRequest, NParams, Handler),
                                     {StatusCode, NRequest1} = reply(Response, NRequest, Handler),
                                     {
                                         StatusCode,
-                                        NRequest1,
-                                        maps:merge(NParams, Meta)
+                                        NRequest1
                                     };
                                 FilterErr ->
+                                    prepend_meta(Params#{failure => failed_meta(FilterErr)}),
                                     {StatusCode, NRequest1} = reply(FilterErr, Request, Handler),
-                                    {StatusCode, NRequest1, maps:merge(Params#{failure => failed_meta(FilterErr)}, Meta)}
+                                    {StatusCode, NRequest1}
                             end;
                         ParseErr ->
+                            prepend_meta(#{failure => failed_meta(ParseErr)}),                
                             {StatusCode, NRequest1} = reply(ParseErr, Request, Handler),
-                            {StatusCode, NRequest1, Meta#{failure => failed_meta(ParseErr)}}
+                            {StatusCode, NRequest1}
                     end;
                 AuthFailed ->
+                    prepend_meta(#{failure => failed_meta(AuthFailed)}),                
                     {StatusCode, NRequest1} = reply(AuthFailed, Request, Handler),
-                    {StatusCode, NRequest1, InitMeta#{failure => failed_meta(AuthFailed)}}
+                    {StatusCode, NRequest1}
             end
     end.
 
@@ -246,3 +261,14 @@ run_log_hook(#{log := Log} = Meta0, ReqStart, ReqEnd, Code, Req) when is_functio
     ok;
 run_log_hook(_Meta, _ReqStart, _ReqEnd, _Code, _Req) ->
     ok.
+
+init_meta(Init) ->
+    erlang:put(?META_KEY, Init).
+
+get_meta() ->
+     erlang:get(?META_KEY).
+
+prepend_meta(New) ->
+    Meta = get_meta(),
+    erlang:put(?META_KEY, maps:merge(New, Meta)).
+
