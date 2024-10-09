@@ -73,13 +73,14 @@ trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, 
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
                 filter        = maps:get(filter, Options, undefined),
-                log           = Log,
+                log_meta      = maps:get(log_meta, MethodDef, #{}),
                 error_codes   = ErrorCodes
                 },
             minirest_info_api:add_codes(ErrorCodes),
             maps:put(binary_method(Method), HandlerState, HandlerStates)
         end,
-    HandlerStates = maps:fold(Fun, #{}, Metadata),
+    MethodStates = maps:fold(Fun, #{}, Metadata),
+    HandlerStates = #{log => Log, methods => MethodStates},
     CompletePath  = append_base_path(BasePath, Path),
     trails:trail(CompletePath, ?HANDLER, HandlerStates, Metadata).
 

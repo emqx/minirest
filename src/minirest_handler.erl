@@ -31,7 +31,7 @@ init(Request0, State)->
     {Code, Request1} = handle(Request0, State),
     ReqEnd = erlang:monotonic_time(),
     Meta = get_log_meta(),
-    run_log_hook(Meta, ReqStart, ReqEnd, Code, Request1),
+    run_log_hook(State, Meta, ReqStart, ReqEnd, Code, Request1),
     {ok, Request1, State}.
 
 %% In previous versions, the metadata was statically derived from the `authorize` method, 
@@ -45,19 +45,19 @@ update_log_meta(New) ->
 
 %%%==============================================================================================
 %% internal
-handle(Request, State) ->
+handle(Request, #{methods := Methods} = _State) ->
     Method = cowboy_req:method(Request),
-    case maps:find(Method, State) of
+    case maps:find(Method, Methods) of
         error ->
             StatusCode = ?RESPONSE_CODE_METHOD_NOT_ALLOWED,
-            Headers = allow_method_header(maps:keys(State)),
+            Headers = allow_method_header(maps:keys(Methods)),
             init_log_meta(Headers#{method => binary_to_existing_atom(Method)}),
             {
                 StatusCode,
                 cowboy_req:reply(StatusCode, Headers, <<"">>, Request)
             };
-        {ok, Handler = #handler{path = Path, log = Log, method = MethodAtom}} ->
-            init_log_meta(#{operation_id => list_to_binary(Path), log => Log, method => MethodAtom}),
+        {ok, Handler = #handler{path = Path, log_meta = LogMeta, method = MethodAtom}} ->
+            init_log_meta(LogMeta#{operation_id => list_to_binary(Path), method => MethodAtom}),
             case do_authorize(Request, Handler) of
                 {ok, AuthMeta} ->
                     update_log_meta(AuthMeta),
@@ -255,11 +255,14 @@ maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
 maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
 maybe_ignore_code_check(_, _) -> false.
 
-run_log_hook(#{log := Log} = Meta0, ReqStart, ReqEnd, Code, Req) when is_function(Log) ->
-    Meta = maps:without([log], Meta0),
+run_log_hook(#{log := {M, F, InitMeta}}, Meta0, ReqStart, ReqEnd, Code, Req) ->
+    Meta = maps:merge(InitMeta, Meta0),
+    _ = M:F(Meta#{req_start => ReqStart, req_end => ReqEnd, code => Code}, Req),
+    ok;
+run_log_hook(#{log := Log}, Meta, ReqStart, ReqEnd, Code, Req) when is_function(Log) ->
     _ = Log(Meta#{req_start => ReqStart, req_end => ReqEnd, code => Code}, Req),
     ok;
-run_log_hook(_log_meta, _ReqStart, _ReqEnd, _Code, _Req) ->
+run_log_hook(_State, _Meta, _ReqStart, _ReqEnd, _Code, _Req) ->
     ok.
 
 init_log_meta(Init) ->
