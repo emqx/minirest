@@ -67,7 +67,7 @@
     function        :: atom(),
     filter          :: fun(),
     authorization   :: {Module :: atom(), Function :: atom()} | undefined,
-    log             :: fun() | undefined,
+    log_meta        :: map(),
     error_codes     :: list(error_code())
 }).
 
