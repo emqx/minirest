@@ -62,7 +62,6 @@
 
 -record(handler, {
     method          :: http_method(),
-    path            :: string(),
     module          :: atom(),
     function        :: atom(),
     filter          :: fun(),
@@ -70,6 +69,14 @@
     log_meta        :: map(),
     error_codes     :: list(error_code())
 }).
+
+-type handler() :: #handler{}.
+
+-type handler_state() :: #{
+    path := path(),
+    log := {module(), atom(), InitMeta :: map()} | undefined,
+    methods := #{http_method() => handler()}
+}.
 
 -define(MFA, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY}).
 -define(LOG(Level, Data), logger:log(Level, Data, #{mfa => ?MFA, line => ?LINE})).
