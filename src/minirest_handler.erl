@@ -26,6 +26,7 @@
 
 %%==============================================================================================
 %% cowboy callback init
+-spec init(_, handler_state()) -> {ok, _, handler_state()}.
 init(Request0, State)->
     ReqStart = erlang:monotonic_time(),
     {Code, Request1} = handle(Request0, State),
@@ -45,28 +46,29 @@ update_log_meta(New) ->
 
 %%%==============================================================================================
 %% internal
-handle(Request, #{methods := Methods} = _State) ->
+handle(Request, #{path := Path, methods := Methods} = State) ->
     Method = cowboy_req:method(Request),
+    OperationId = list_to_binary(Path),
     case maps:find(Method, Methods) of
         error ->
             StatusCode = ?RESPONSE_CODE_METHOD_NOT_ALLOWED,
             Headers = allow_method_header(maps:keys(Methods)),
-            init_log_meta(Headers#{method => binary_to_existing_atom(Method)}),
+            init_log_meta(Headers#{operation_id => OperationId, method => minirest_trails:atom_method(Method)}),
             {
                 StatusCode,
                 cowboy_req:reply(StatusCode, Headers, <<"">>, Request)
             };
-        {ok, Handler = #handler{path = Path, log_meta = LogMeta, method = MethodAtom}} ->
-            init_log_meta(LogMeta#{operation_id => list_to_binary(Path), method => MethodAtom}),
+        {ok, Handler = #handler{log_meta = LogMeta, method = MethodAtom}} ->
+            init_log_meta(LogMeta#{operation_id => OperationId, method => MethodAtom}),
             case do_authorize(Request, Handler) of
                 {ok, AuthMeta} ->
                     update_log_meta(AuthMeta),
                     case do_parse_params(Request) of
                         {ok, Params, NRequest} ->
-                            case do_validate_params(Params, Handler) of
+                            case do_validate_params(Params, State, Handler) of
                                 {ok, NParams} ->
                                     prepend_log_meta(NParams),
-                                    Response = apply_callback(NRequest, NParams, Handler),
+                                    Response = apply_callback(NRequest, NParams, State, Handler),
                                     {StatusCode, NRequest1} = reply(Response, NRequest, Handler),
                                     {
                                         StatusCode,
@@ -148,22 +150,24 @@ do_read_body(Request, Params) ->
             {ok, Params, Request}
     end.
 
-do_validate_params(Params, #handler{filter = Filter,
-                                    path   = Path,
-                                    module = Mod,
-                                    method = Method}) when is_function(Filter, 2) ->
+do_validate_params(Params, #{path := Path}, #handler{
+    filter = Filter,
+    module = Mod,
+    method = Method
+}) when is_function(Filter, 2) ->
     Filter(Params, #{path => Path, module => Mod, method => Method});
-do_validate_params(Params, Handler = #handler{filter = [Filter | Rest]}) ->
-    case do_validate_params(Params, Handler#handler{filter = Filter}) of
+do_validate_params(Params, State, Handler = #handler{filter = [Filter | Rest]}) ->
+    case do_validate_params(Params, State, Handler#handler{filter = Filter}) of
         {ok, NParams} ->
-            do_validate_params(NParams, Handler#handler{filter = Rest});
-        Error -> Error
+            do_validate_params(NParams, State, Handler#handler{filter = Rest});
+        Error ->
+            Error
     end;
-do_validate_params(Params, _Handler) ->
+do_validate_params(Params, _State, _Handler) ->
     {ok, Params}.
 
-apply_callback(Request, Params, Handler) ->
-    #handler{path = Path, method = Method, module = Mod, function = Fun} = Handler,
+apply_callback(Request, Params, #{path := Path}, Handler) ->
+    #handler{method = Method, module = Mod, function = Fun} = Handler,
     try
         Args =
             case erlang:function_exported(Mod, Fun, 3) of

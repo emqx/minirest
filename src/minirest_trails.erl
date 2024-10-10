@@ -19,6 +19,8 @@
 
 -export([trails_schemas/1]).
 
+-export([atom_method/1]).
+
 -define(HANDLER, minirest_handler).
 
 trails_schemas(Options) ->
@@ -63,12 +65,11 @@ trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function})
     trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, #{}});
 trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, Options}) ->
     Fun =
-        fun(Method, MethodDef, HandlerStates) ->
+        fun(Method, MethodDef, MethodStates) ->
             #{responses := Responses} = MethodDef,
             ErrorCodes = maps:fold(fun get_error_codes/3, [], Responses),
             HandlerState = #handler{
                 method        = Method,
-                path          = Path,
                 module        = Module,
                 function      = Function,
                 authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
@@ -77,12 +78,12 @@ trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, 
                 error_codes   = ErrorCodes
                 },
             minirest_info_api:add_codes(ErrorCodes),
-            maps:put(binary_method(Method), HandlerState, HandlerStates)
+            maps:put(binary_method(Method), HandlerState, MethodStates)
         end,
     MethodStates = maps:fold(Fun, #{}, Metadata),
-    HandlerStates = #{log => Log, methods => MethodStates},
+    HandlerState = #{path => Path, log => Log, methods => MethodStates},
     CompletePath  = append_base_path(BasePath, Path),
-    trails:trail(CompletePath, ?HANDLER, HandlerStates, Metadata).
+    trails:trail(CompletePath, ?HANDLER, HandlerState, Metadata).
 
 -define(NEST_CODE_KEYS, [<<"content">>,
     <<"application/json">>,
@@ -188,6 +189,17 @@ binary_method(patch)   -> <<"PATCH">>;
 binary_method(options) -> <<"OPTION">>;
 binary_method(connect) -> <<"CONNECT">>;
 binary_method(trace)   -> <<"TRACE">>.
+
+atom_method(<<"GET">>) -> get;
+atom_method(<<"POST">>) -> post;
+atom_method(<<"PUT">>) ->  put;
+atom_method(<<"HEAD">>) -> head;
+atom_method(<<"DELETE">>) -> delete;
+atom_method(<<"PATCH">>) -> patch;
+atom_method(<<"OPTION">>) -> options;
+atom_method(<<"CONNECT">>) -> connect;
+atom_method(<<"TRACE">>) -> trace.
+
 
 assert_module_api_specs(ModuleApiSpec) ->
     case [E || E = {error, _} <- ModuleApiSpec] of
