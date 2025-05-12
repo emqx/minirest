@@ -183,7 +183,12 @@ parse_params(Req) ->
     QueryParams = cowboy_req:parse_qs(Req),
     BodyParams = case cowboy_req:has_body(Req) of
                      true  -> {_, Body, _} = cowboy_req:read_body(Req),
-                              json_decode(Body);
+                     case cowboy_req:header(<<"content-type">>, Req) of
+                        <<"application/x-www-form-urlencoded">> ->
+                            cow_qs:parse_qs(Body);
+                        _ ->
+                              json_decode(Body)
+                     end;
                      false -> []
                  end,
     QueryParams ++ BodyParams.
@@ -210,7 +215,11 @@ jsonify(Code, Response, Req) ->
 jsonify(Code, Headers, Response, Req) ->
     try json_encode(Response) of
         Json ->
-            Req1 = cowboy_req:reply(Code, maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers), Json, Req),
+            Headers1 = case maps:get(<<"Content-Type">>, Headers, undefined) of
+                undefined -> maps:merge(#{<<"content-type">> => <<"application/json">>}, Headers);
+                _ -> Headers#{<<"Content-Length">> => integer_to_binary(byte_size(Json))}
+            end,
+            Req1 = cowboy_req:reply(Code, Headers1, Json, Req),
             case Code of
                 200 -> {200, #{}, Req1};
                 _ -> {Code, Response, Req1}
