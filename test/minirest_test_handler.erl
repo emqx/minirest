@@ -19,72 +19,99 @@
 %% API
 -export([api_spec/0]).
 
--export([lazy_body/2,
-         binary_body/2,
-         flex_error/2,
-         qs_params/2]).
+-export([
+    lazy_body/2,
+    binary_body/2,
+    flex_error/2,
+    qs_params/2
+]).
 
 api_spec() ->
-  {
-    [lazy_body(),
-     binary_body(),
-     flex_error(),
-     qs_params()],
-    []
-  }.
+    {
+        [
+            lazy_body(),
+            binary_body(),
+            flex_error(),
+            qs_params()
+        ],
+        []
+    }.
 
 lazy_body() ->
     MetaData = #{
         get => #{
             description => "lazy body",
             responses => #{
-            <<"200">> => #{
-                content => #{
-                  'text/plain' => #{
-                        schema => #{
-                            type => string}}}}}}
-                },
-  {"/lazy_body", MetaData, lazy_body}.
+                <<"200">> => #{
+                    content => #{
+                        'text/plain' => #{
+                            schema => #{
+                                type => string
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    {"/lazy_body", MetaData, lazy_body}.
 
 binary_body() ->
     MetaData = #{
         get => #{
             description => "binary body",
             responses => #{
-            <<"200">> => #{
-                content => #{
-                  'text/plain' => #{
-                        schema => #{
-                            type => string}}}}}}
-                },
-  {"/binary_body", MetaData, binary_body}.
-
+                <<"200">> => #{
+                    content => #{
+                        'text/plain' => #{
+                            schema => #{
+                                type => string
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    {"/binary_body", MetaData, binary_body}.
 
 qs_params() ->
     MetaData = #{
         get => #{
             description => "parse QS params",
             responses => #{
-            <<"200">> => #{
-                content => #{
-                  'text/plain' => #{
-                        schema => #{
-                            type => string}}}}}}
-                },
-  {"/qs_params", MetaData, qs_params}.
+                <<"200">> => #{
+                    content => #{
+                        'text/plain' => #{
+                            schema => #{
+                                type => string
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    {"/qs_params", MetaData, qs_params}.
 
 flex_error() ->
-  MetaData = #{
-    get => #{
-      description => "binary body",
-      responses => #{
-      <<"400">> => #{
-          content => #{
-            'application/json' => #{
-                  schema => #{
-                      type => string}}}}}}
+    MetaData = #{
+        get => #{
+            description => "binary body",
+            responses => #{
+                <<"400">> => #{
+                    content => #{
+                        'application/json' => #{
+                            schema => #{
+                                type => string
+                            }
+                        }
+                    }
+                }
+            }
+        }
     },
-  {"/flex_error", MetaData, flex_error}.
+    {"/flex_error", MetaData, flex_error}.
 
 lazy_body(get, _) ->
     BodyQH = qlc:table(fun() -> [<<"first">>, <<"second">>] end, []),
@@ -96,7 +123,7 @@ binary_body(get, _) ->
 
 qs_params(get, #{query_string := Qs}) ->
     #{<<"single">> := <<"foo">>, <<"array">> := [<<"bar">>, <<"foo">>]} = Qs,
-    {200,  #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
+    {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 flex_error(get, _) ->
     {400, #{message => <<"boom">>, code => 'BAD_REQUEST', hint => <<"something went wrong">>}}.

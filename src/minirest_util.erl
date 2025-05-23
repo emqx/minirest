@@ -19,35 +19,37 @@
 
 -spec pmap(fun((A) -> B), list(A), timeout()) -> list(B | {error, term()}).
 pmap(Fun, List, Timeout) ->
-  Self = self(),
-  WorkFun = fun(El) -> spawn_link(fun() -> pmap_exec(Self, Fun, El, Timeout) end) end,
-  Workers = lists:map(WorkFun, List),
-  pmap_gather(Workers).
+    Self = self(),
+    WorkFun = fun(El) -> spawn_link(fun() -> pmap_exec(Self, Fun, El, Timeout) end) end,
+    Workers = lists:map(WorkFun, List),
+    pmap_gather(Workers).
 
 pmap_exec(CallerPid, Fun, El, Timeout) ->
-  ExecPid = self(),
-  {Pid, Ref} = spawn_monitor(fun() ->
-    Res =
-      try {normal, Fun(El)}
-      catch C:E:ST ->
-        {crash, {C, E, ST}}
-      end,
-    ExecPid ! {result, self(), Res}
-                             end),
-  ExecResult =
-    receive
-      {result, Pid, {normal, Result}} -> Result;
-      {result, Pid, {crash, {C, E, ST}}} -> {error, {El, {C, E, ST}}};
-      {'DOWN', Ref, process, Pid, Reason} -> {error, {El, Reason}}
-    after Timeout ->
-      true = erlang:exit(Pid, kill),
-      {error, {El, timeout}}
-    end,
-  CallerPid ! {ExecPid, ExecResult}.
+    ExecPid = self(),
+    {Pid, Ref} = spawn_monitor(fun() ->
+        Res =
+            try
+                {normal, Fun(El)}
+            catch
+                C:E:ST ->
+                    {crash, {C, E, ST}}
+            end,
+        ExecPid ! {result, self(), Res}
+    end),
+    ExecResult =
+        receive
+            {result, Pid, {normal, Result}} -> Result;
+            {result, Pid, {crash, {C, E, ST}}} -> {error, {El, {C, E, ST}}};
+            {'DOWN', Ref, process, Pid, Reason} -> {error, {El, Reason}}
+        after Timeout ->
+            true = erlang:exit(Pid, kill),
+            {error, {El, timeout}}
+        end,
+    CallerPid ! {ExecPid, ExecResult}.
 
 pmap_gather([Worker | Workers]) ->
-  receive
-    {Worker, Result} -> [Result | pmap_gather(Workers)]
-  end;
+    receive
+        {Worker, Result} -> [Result | pmap_gather(Workers)]
+    end;
 pmap_gather([]) ->
-  [].
+    [].

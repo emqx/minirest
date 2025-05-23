@@ -14,12 +14,14 @@
 
 -module(minirest).
 
--export([ start/2
-        , start/3
-        , stop/1
-        , update_dispatch/1
-        , generate_dispatch/1
-        , ref/1]).
+-export([
+    start/2,
+    start/3,
+    stop/1,
+    update_dispatch/1,
+    generate_dispatch/1,
+    ref/1
+]).
 
 -include("minirest.hrl").
 
@@ -30,11 +32,15 @@ start(Name, RanchOptions, Options) ->
     init_dispatch(Name, Options),
     Protocol = maps:get(protocol, Options, http),
     ProtoOpts = maps:get(protocol_options, Options, #{}),
-    CowboyOptions = middlewares(Options,
+    CowboyOptions = middlewares(
+        Options,
         ProtoOpts#{
-            env => #{dispatch => {persistent_term, Name},
-                options => Options#{name => Name}}
-        }),
+            env => #{
+                dispatch => {persistent_term, Name},
+                options => Options#{name => Name}
+            }
+        }
+    ),
     start_listener(Protocol, Name, RanchOptions, CowboyOptions).
 
 init_dispatch(Name, Options) ->
@@ -42,12 +48,13 @@ init_dispatch(Name, Options) ->
         undefined ->
             Dispatch = merge_dispatch([], Options),
             persistent_term:put(Name, Dispatch);
-        _ -> ok
+        _ ->
+            ok
     end.
 
 update_dispatch(Name) ->
-    [Name, _Transport, _SocketOpts, _Protocol, StartArgs]
-        = ranch_server:get_listener_start_args(Name),
+    [Name, _Transport, _SocketOpts, _Protocol, StartArgs] =
+        ranch_server:get_listener_start_args(Name),
     #{env := #{options := Options}} = StartArgs,
     #{
         dispatch := NewDispatch,
@@ -78,7 +85,6 @@ stop(Name) ->
 
 ref(Name) when is_atom(Name) ->
     ref(atom_to_binary(Name, utf8));
-
 ref(Name) ->
     cowboy_swagger:schema(Name).
 
@@ -94,15 +100,17 @@ merge_dispatch(Trails, #{dispatch := Dispatch0}) ->
     [{Host, CowField, RestDispatch}] = trails:single_host_compile(Trails),
     [{_, _, Dispatch}] = cowboy_router:compile([{'_', Dispatch0}]),
     [{Host, CowField, RestDispatch ++ Dispatch}];
-
-merge_dispatch(Trails, _)->
+merge_dispatch(Trails, _) ->
     trails:single_host_compile(Trails).
 
-middlewares(#{middlewares := []}, CowboyOptions) -> CowboyOptions;
-middlewares(#{middlewares := [cowboy_router, cowboy_handler]}, CowboyOptions) -> CowboyOptions;
+middlewares(#{middlewares := []}, CowboyOptions) ->
+    CowboyOptions;
+middlewares(#{middlewares := [cowboy_router, cowboy_handler]}, CowboyOptions) ->
+    CowboyOptions;
 middlewares(#{middlewares := Middlewares}, CowboyOptions) when is_list(Middlewares) ->
     maps:put(middlewares, Middlewares, CowboyOptions);
-middlewares(_, CowboyOptions) -> CowboyOptions.
+middlewares(_, CowboyOptions) ->
+    CowboyOptions.
 
 start_listener(http, Name, TransOpts, CowboyOptions) ->
     start_listener_(start_clear, Name, TransOpts, CowboyOptions);
@@ -123,17 +131,21 @@ log_start_result({error, eaddrinuse = Reason}, Log) ->
 log_start_result({error, eacces = Reason}, Log) ->
     ?LOG(error, Log#{msg => ?FAILED_MSG, description => "permission_denied", reason => Reason});
 log_start_result({error, no_cert = Reason}, Log) ->
-    ?LOG(error, Log#{msg => ?FAILED_MSG, description => "no_certificate_provided;", reason => Reason});
+    ?LOG(error, Log#{
+        msg => ?FAILED_MSG, description => "no_certificate_provided;", reason => Reason
+    });
 %% copy from ranch.erl line:162
-log_start_result({error, {{shutdown, {failed_to_start_child, ranch_acceptors_sup,
-    Reason}}, _}}, Log0) ->
+log_start_result(
+    {error, {{shutdown, {failed_to_start_child, ranch_acceptors_sup, Reason}}, _}}, Log0
+) ->
     Log = Log0#{msg => ?FAILED_MSG, reason => Reason},
     case Reason of
         {listen_error, _, eaddrnotavail} ->
             ?LOG(error, Log#{description => "cannot_assign_requested_address"});
         {listen_error, _, ebusy} ->
             ?LOG(error, Log#{description => "file_busy"});
-        _ -> ?LOG(error, Log)
+        _ ->
+            ?LOG(error, Log)
     end.
 
 get_port(L) when is_list(L) -> proplists:get_value(port, L);

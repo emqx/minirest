@@ -55,26 +55,29 @@ end_per_suite(_Config) ->
 
 t_lazy_body(_Config) ->
     ?assertMatch(
-       {ok, {{_Version, 200, _Status}, _Headers, "firstsecond"}},
-       httpc:request(address() ++ "/lazy_body")).
+        {ok, {{_Version, 200, _Status}, _Headers, "firstsecond"}},
+        httpc:request(address() ++ "/lazy_body")
+    ).
 
 t_binary_body(_Config) ->
     ?assertMatch(
-       {ok, {{_Version, 200, _Status}, _Headers, "alldataatonce"}},
-       httpc:request(address() ++ "/binary_body")).
+        {ok, {{_Version, 200, _Status}, _Headers, "alldataatonce"}},
+        httpc:request(address() ++ "/binary_body")
+    ).
 
 t_flex_error(_Config) ->
     {ok, {{_Version, 400, _Status}, _Headers, Body}} =
-       httpc:request(address() ++ "/flex_error"),
+        httpc:request(address() ++ "/flex_error"),
     ?assertMatch(
-       #{<<"code">> := _, <<"message">> := _, <<"hint">> := _},
-       jsx:decode(iolist_to_binary(Body), [return_maps])).
+        #{<<"code">> := _, <<"message">> := _, <<"hint">> := _},
+        jsx:decode(iolist_to_binary(Body), [return_maps])
+    ).
 
 t_qs_params(_Config) ->
     ?assertMatch(
-       {ok, {{_Version, 200, _Status}, _Headers, "OK"}},
-       httpc:request(address() ++ "/qs_params?single=foo&array=foo&array=bar")
-      ).
+        {ok, {{_Version, 200, _Status}, _Headers, "OK"}},
+        httpc:request(address() ++ "/qs_params?single=foo&array=foo&array=bar")
+    ).
 
 address() ->
     "http://localhost:" ++ integer_to_list(?PORT).

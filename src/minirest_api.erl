@@ -27,13 +27,19 @@ find_api_modules([], Acc) ->
     Acc;
 find_api_modules([App | Apps], Acc) ->
     case application:get_key(App, modules) of
-        undefined -> Acc;
+        undefined ->
+            Acc;
         {ok, Modules} ->
-            NewAcc = lists:filter(fun(Module) ->
+            NewAcc = lists:filter(
+                fun(Module) ->
                     Info = Module:module_info(attributes),
-                    Behaviour = lists:flatten(proplists:get_all_values(behavior, Info) ++
-                                    proplists:get_all_values(behaviour, Info)),
+                    Behaviour = lists:flatten(
+                        proplists:get_all_values(behavior, Info) ++
+                            proplists:get_all_values(behaviour, Info)
+                    ),
                     lists:member(minirest_api, Behaviour)
-            end, Modules),
+                end,
+                Modules
+            ),
             find_api_modules(Apps, NewAcc ++ Acc)
     end.

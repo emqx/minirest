@@ -17,18 +17,20 @@
 -include("minirest_http.hrl").
 -include_lib("kernel/include/file.hrl").
 
--export([ parse/1
-        , parse/2
-        ]).
+-export([
+    parse/1,
+    parse/2
+]).
 
--export([ encode/1
-        , encode/2
-        ]).
+-export([
+    encode/1,
+    encode/2
+]).
 %%==============================================================================================
 %% parse
--spec(parse(Request :: map()) ->
-            {ok, Body :: map() | binary(), NRequest :: map()} |
-            {response, {?RESPONSE_CODE_BAD_REQUEST, ErrorMessage :: map()}}).
+-spec parse(Request :: map()) ->
+    {ok, Body :: map() | binary(), NRequest :: map()}
+    | {response, {?RESPONSE_CODE_BAD_REQUEST, ErrorMessage :: map()}}.
 parse(Request) ->
     parse(Request, decoder(Request)).
 
@@ -59,9 +61,10 @@ json_decoder(Request) ->
     {ok, Body, NRequest} = cowboy_req:read_body(Request),
     try
         {ok, jsx:decode(Body, [return_maps]), NRequest}
-    catch _:_:_ ->
-        Error = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
-        {response, {?RESPONSE_CODE_BAD_REQUEST, Error}}
+    catch
+        _:_:_ ->
+            Error = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
+            {response, {?RESPONSE_CODE_BAD_REQUEST, Error}}
     end.
 
 forma_data_decoder(Request) ->
@@ -84,10 +87,11 @@ loop_form(Request, Body) ->
                     {Body#{FieldName => Data}, Request2};
                 {file, FieldName, FileName, Type} ->
                     Body1 = maps:update_with(
-                              FieldName,
-                              fun(Files) -> Files#{FileName => Data} end,
-                              #{type => Type, FileName => Data},
-                              Body),
+                        FieldName,
+                        fun(Files) -> Files#{FileName => Data} end,
+                        #{type => Type, FileName => Data},
+                        Body
+                    ),
                     {Body1, Request2}
             end;
         {done, Request1} ->
