@@ -70,11 +70,12 @@ trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, 
         fun(Method, MethodDef, MethodStates) ->
             #{responses := Responses} = MethodDef,
             ErrorCodes = maps:fold(fun get_error_codes/3, [], Responses),
+            Security = maps:get(security, MethodDef, []),
             HandlerState = #handler{
                 method = Method,
                 module = Module,
                 function = Function,
-                authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
+                authorization = authorization(Security, Authorization),
                 filter = maps:get(filter, Options, undefined),
                 log_meta = maps:get(log_meta, MethodDef, #{}),
                 error_codes = ErrorCodes
@@ -115,6 +116,9 @@ get_error_codes_([Key | Keys], Data) when is_map(Data) ->
         undefined -> [];
         SubData -> get_error_codes_(Keys, SubData)
     end.
+
+authorization([], _Authorization) -> false;
+authorization(_Security, Authorization) -> Authorization.
 
 format_code(Codes) ->
     lists:map(

@@ -93,7 +93,7 @@ auth_meta_in_filter() ->
         get => #{
             description => "auth meta in filter",
             responses => text_plain_200_response(),
-            security => true
+            security => [#{application => []}]
         }
     },
     Filter = fun(#{auth_meta := #{message := Message}}, _) ->
@@ -106,7 +106,7 @@ auth_meta_in_handler() ->
         get => #{
             description => "auth meta in handler",
             responses => text_plain_200_response(),
-            security => true
+            security => [#{application => []}]
         }
     },
     {"/auth_meta_in_handler", MetaData, auth_meta_in_handler}.
