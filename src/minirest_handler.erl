@@ -35,8 +35,8 @@ init(Request0, State) ->
     run_log_hook(State, Meta, ReqStart, ReqEnd, Code, Request1),
     {ok, Request1, State}.
 
-%% In previous versions, the metadata was statically derived from the `authorize` method, 
-%% but some endpoints may not have an `authorize` method, 
+%% In previous versions, the metadata was statically derived from the `authorize` method,
+%% but some endpoints may not have an `authorize` method,
 %% or it may be an interactive endpoint whose metadata cannot be determined in one step.
 %% Here, the metadata is moved from the function return to the process dictionary,
 %% so that the metadata in the endpoint can be updated.
@@ -65,7 +65,7 @@ handle(Request, #{path := Path, methods := Methods} = State) ->
             case do_authorize(Request, Handler) of
                 {ok, AuthMeta} ->
                     update_log_meta(AuthMeta),
-                    case do_parse_params(Request) of
+                    case do_parse_params(Request, AuthMeta) of
                         {ok, Params, NRequest} ->
                             case do_validate_params(Params, State, Handler) of
                                 {ok, NParams} ->
@@ -84,19 +84,21 @@ handle(Request, #{path := Path, methods := Methods} = State) ->
                                     {StatusCode, NRequest1}
                             end;
                         ParseErr ->
-                            prepend_log_meta(#{failure => failed_log_meta(ParseErr)}),                
+                            prepend_log_meta(#{failure => failed_log_meta(ParseErr)}),
                             {StatusCode, NRequest1} = reply(ParseErr, Request, Handler),
                             {StatusCode, NRequest1}
                     end;
                 AuthFailed ->
-                    prepend_log_meta(#{failure => failed_log_meta(AuthFailed)}),                
+                    prepend_log_meta(#{failure => failed_log_meta(AuthFailed)}),
                     {StatusCode, NRequest1} = reply(AuthFailed, Request, Handler),
                     {StatusCode, NRequest1}
             end
     end.
 
 failed_log_meta({Code, #{} = Meta}) when is_integer(Code) -> Meta;
+failed_log_meta({Code, _Response}) when is_integer(Code) -> #{};
 failed_log_meta({Code, _Header, #{} = Meta}) when is_integer(Code) -> Meta;
+failed_log_meta({Code, _Header, _Response}) when is_integer(Code) -> #{};
 failed_log_meta({_, Code, Message}) when is_atom(Code) ->
     #{code => Code, message => Message};
 %% parse body failed
@@ -115,12 +117,13 @@ do_authorize(Request, #handler{authorization = {M, F}}) ->
 do_authorize(_Request, _Handler) ->
     {ok, #{}}.
 
-do_parse_params(Request) ->
+do_parse_params(Request, AuthMeta) ->
     Params = #{
         bindings => cowboy_req:bindings(Request),
         query_string => parse_qs(Request),
         headers => cowboy_req:headers(Request),
-        body => #{}
+        body => #{},
+        auth_meta => AuthMeta
     },
     do_read_body(Request, Params).
 

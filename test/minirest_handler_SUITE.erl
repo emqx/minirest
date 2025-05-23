@@ -28,7 +28,9 @@ all() ->
         t_lazy_body,
         t_binary_body,
         t_flex_error,
-        t_qs_params
+        t_qs_params,
+        t_auth_meta_in_filter,
+        t_auth_meta_in_handler
     ].
 
 init_per_suite(Config) ->
@@ -41,6 +43,7 @@ init_per_suite(Config) ->
     Minirest = #{
         base_path => "",
         modules => [?HANDLER_MODULE],
+        authorization => {?HANDLER_MODULE, authorize},
         dispatch => [{"/[...]", ?HANDLER_MODULE, []}],
         protocol => http,
         ranch_options => RanchOptions,
@@ -77,6 +80,18 @@ t_qs_params(_Config) ->
     ?assertMatch(
         {ok, {{_Version, 200, _Status}, _Headers, "OK"}},
         httpc:request(address() ++ "/qs_params?single=foo&array=foo&array=bar")
+    ).
+
+t_auth_meta_in_filter(_Config) ->
+    ?assertMatch(
+        {ok, {{_Version, 200, _Status}, _Headers, "hello from authorize"}},
+        httpc:request(address() ++ "/auth_meta_in_filter")
+    ).
+
+t_auth_meta_in_handler(_Config) ->
+    ?assertMatch(
+        {ok, {{_Version, 200, _Status}, _Headers, "hello from authorize"}},
+        httpc:request(address() ++ "/auth_meta_in_handler")
     ).
 
 address() ->
