@@ -2,18 +2,21 @@ name: Run test cases
 
 on: [push, pull_request]
 
-jobs:    
+jobs:
     run_test_cases:
         runs-on: ubuntu-latest
-      
+
         container:
             image: ghcr.io/emqx/emqx-builder/5.3-13:1.15.7-26.2.5.2-1-ubuntu22.04
-            
+
         steps:
             - uses: actions/checkout@v4
+            - name: check formatting
+              run: make fmt-check
+            - name: run xref checks
+              run: make xref
             - name: run test cases
               run: |
-                make xref
                 make eunit  
                 make ct
                 make cover

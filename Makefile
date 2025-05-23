@@ -3,6 +3,7 @@ REBAR := rebar3
 .PHONY: all
 all: compile
 
+.PHONY: compile
 compile:
 	$(REBAR) compile
 
@@ -25,6 +26,7 @@ eunit: compile
 ct: compile
 	$(REBAR) as test ct -v
 
+.PHONY: cover
 cover:
 	$(REBAR) cover
 
@@ -32,3 +34,10 @@ cover:
 dialyzer:
 	$(REBAR) dialyzer
 
+.PHONY: fmt
+fmt:
+	$(REBAR) fmt --verbose -w
+
+.PHONY: fmt-check
+fmt-check:
+	$(REBAR) fmt --verbose --check
