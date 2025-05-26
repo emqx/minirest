@@ -20,13 +20,15 @@
 -export([api_spec/0]).
 
 -export([
-    authorize/1,
+    authorize1/1,
+    authorize2/2,
     lazy_body/2,
     binary_body/2,
     flex_error/2,
     qs_params/2,
     auth_meta_in_filter/2,
-    auth_meta_in_handler/2
+    auth_meta_in_handler/2,
+    handler_meta_in_auth/2
 ]).
 
 api_spec() ->
@@ -37,7 +39,8 @@ api_spec() ->
             flex_error(),
             qs_params(),
             auth_meta_in_filter(),
-            auth_meta_in_handler()
+            auth_meta_in_handler(),
+            handler_meta_in_auth()
         ],
         []
     }.
@@ -111,8 +114,24 @@ auth_meta_in_handler() ->
     },
     {"/auth_meta_in_handler", MetaData, auth_meta_in_handler}.
 
-authorize(_Req) ->
+handler_meta_in_auth() ->
+    MetaData = #{
+        get => #{
+            description => "handler meta in auth",
+            responses => text_plain_200_response(),
+            security => [#{application => []}]
+        }
+    },
+    {"/handler_meta_in_auth", MetaData, handler_meta_in_auth}.
+
+authorize1(_Req) ->
     {ok, #{message => <<"hello from authorize">>}}.
+
+authorize2(_Req, #{module := Module, function := Fun}) ->
+    {ok, #{
+        message =>
+            <<"hello from ", (atom_to_binary(Module))/binary, ":", (atom_to_binary(Fun))/binary>>
+    }}.
 
 lazy_body(get, _) ->
     BodyQH = qlc:table(fun() -> [<<"first">>, <<"second">>] end, []),
@@ -133,6 +152,9 @@ auth_meta_in_filter(get, _) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 auth_meta_in_handler(get, #{auth_meta := #{message := Message}}) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, Message}.
+
+handler_meta_in_auth(get, #{auth_meta := #{message := Message}}) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, Message}.
 
 %%--------------------------------------------------------------------

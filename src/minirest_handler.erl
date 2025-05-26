@@ -112,8 +112,16 @@ trans_allow([], Res) -> Res;
 trans_allow([Method], Res) -> <<Res/binary, Method/binary>>;
 trans_allow([Method | Allow], Res) -> trans_allow(Allow, <<Res/binary, Method/binary, ", ">>).
 
-do_authorize(Request, #handler{authorization = {M, F}}) ->
-    erlang:apply(M, F, [Request]);
+do_authorize(Request, #handler{
+    authorization = {M, F}, method = Method, module = Mod, function = Fun
+}) ->
+    HandlerInfo = #{method => Method, module => Mod, function => Fun},
+    case erlang:function_exported(M, F, 2) of
+        true ->
+            erlang:apply(M, F, [Request, HandlerInfo]);
+        false ->
+            erlang:apply(M, F, [Request])
+    end;
 do_authorize(_Request, _Handler) ->
     {ok, #{}}.
 
