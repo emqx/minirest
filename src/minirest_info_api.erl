@@ -20,15 +20,16 @@
 -dialyzer({nowarn_function, set_codes/1}).
 
 %% API Spec
--export([ api_spec/0]).
+-export([api_spec/0]).
 
 %% API Callback
--export([ error_codes/2]).
+-export([error_codes/2]).
 
 %% For codes
--export([ add_codes/1
-        , codes/0
-        ]).
+-export([
+    add_codes/1,
+    codes/0
+]).
 
 api_spec() ->
     {
@@ -46,15 +47,24 @@ error_codes_api() ->
                         'application/json' => #{
                             schema => #{
                                 type => array,
-                                schema => minirest:ref(minirest_api_error_codes)}}}}}}},
+                                schema => minirest:ref(minirest_api_error_codes)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
     {"/info/error/codes", MetaData, error_codes}.
 
 error_codes(_, _) ->
     Body = #{codes => codes()},
     {200, Body}.
 
-add_codes(undefined) -> codes();
-add_codes([]) -> codes();
+add_codes(undefined) ->
+    codes();
+add_codes([]) ->
+    codes();
 add_codes(Codes) when is_list(Codes) ->
     add_codes(Codes, codes()).
 
@@ -94,4 +104,3 @@ error_codes_schema(Codes) ->
             enum => Codes
         }
     }.
-

@@ -26,7 +26,9 @@
 trails_schemas(Options) ->
     Modules = modules(Options),
     Security = maps:get(security, Options, undefined),
-    ModuleApiSpecList = minirest_util:pmap(fun(Module) -> api_spec(Security, Module) end, Modules, 30000),
+    ModuleApiSpecList = minirest_util:pmap(
+        fun(Module) -> api_spec(Security, Module) end, Modules, 30000
+    ),
     assert_module_api_specs(ModuleApiSpecList),
     {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),
     case maps:get(swagger_support, Options, true) of
@@ -68,24 +70,26 @@ trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, 
         fun(Method, MethodDef, MethodStates) ->
             #{responses := Responses} = MethodDef,
             ErrorCodes = maps:fold(fun get_error_codes/3, [], Responses),
+            Security = maps:get(security, MethodDef, []),
             HandlerState = #handler{
-                method        = Method,
-                module        = Module,
-                function      = Function,
-                authorization = maps:get(security, MethodDef, []) =/= [] andalso Authorization,
-                filter        = maps:get(filter, Options, undefined),
-                log_meta      = maps:get(log_meta, MethodDef, #{}),
-                error_codes   = ErrorCodes
-                },
+                method = Method,
+                module = Module,
+                function = Function,
+                authorization = authorization(Security, Authorization),
+                filter = maps:get(filter, Options, undefined),
+                log_meta = maps:get(log_meta, MethodDef, #{}),
+                error_codes = ErrorCodes
+            },
             minirest_info_api:add_codes(ErrorCodes),
             maps:put(binary_method(Method), HandlerState, MethodStates)
         end,
     MethodStates = maps:fold(Fun, #{}, Metadata),
     HandlerState = #{path => Path, log => Log, methods => MethodStates},
-    CompletePath  = append_base_path(BasePath, Path),
+    CompletePath = append_base_path(BasePath, Path),
     trails:trail(CompletePath, ?HANDLER, HandlerState, Metadata).
 
--define(NEST_CODE_KEYS, [<<"content">>,
+-define(NEST_CODE_KEYS, [
+    <<"content">>,
     <<"application/json">>,
     <<"schema">>,
     <<"properties">>,
@@ -100,23 +104,31 @@ get_error_codes(_Status, RespDef, Acc) when is_map(RespDef) ->
         _ -> Acc
     end.
 
-get_error_codes_([], Data) -> Data;
-get_error_codes_([Key | Keys], Data) when is_list(Data)->
+get_error_codes_([], Data) ->
+    Data;
+get_error_codes_([Key | Keys], Data) when is_list(Data) ->
     case lists:keyfind(Key, 1, Data) of
         false -> [];
         {_, SubData} -> get_error_codes_(Keys, SubData)
     end;
-get_error_codes_([Key | Keys], Data) when is_map(Data)->
+get_error_codes_([Key | Keys], Data) when is_map(Data) ->
     case maps:get(Key, Data, undefined) of
         undefined -> [];
         SubData -> get_error_codes_(Keys, SubData)
     end.
 
-format_code(Codes) -> lists:map(
-    fun(C) when is_binary(C) -> binary_to_atom(C);
-        (C) when is_list(C) -> list_to_atom(C);
-        (C) when is_atom(C) -> C
-    end, Codes).
+authorization([], _Authorization) -> false;
+authorization(_Security, Authorization) -> Authorization.
+
+format_code(Codes) ->
+    lists:map(
+        fun
+            (C) when is_binary(C) -> binary_to_atom(C);
+            (C) when is_list(C) -> list_to_atom(C);
+            (C) when is_atom(C) -> C
+        end,
+        Codes
+    ).
 
 api_spec(Security, Module) ->
     try
@@ -170,7 +182,6 @@ decs_str_to_binary(Data) when is_map(Data) ->
 decs_str_to_binary(Data) ->
     Data.
 
-
 root_path(Path) ->
     case string:tokens(Path, "/") of
         [] -> "/";
@@ -180,26 +191,25 @@ root_path(Path) ->
 append_base_path(undefined, Path) -> Path;
 append_base_path(BasePath, Path) -> lists:append(BasePath, Path).
 
-binary_method(get)     -> <<"GET">>;
-binary_method(post)    -> <<"POST">>;
-binary_method(put)     -> <<"PUT">>;
-binary_method(head)    -> <<"HEAD">>;
-binary_method(delete)  -> <<"DELETE">>;
-binary_method(patch)   -> <<"PATCH">>;
+binary_method(get) -> <<"GET">>;
+binary_method(post) -> <<"POST">>;
+binary_method(put) -> <<"PUT">>;
+binary_method(head) -> <<"HEAD">>;
+binary_method(delete) -> <<"DELETE">>;
+binary_method(patch) -> <<"PATCH">>;
 binary_method(options) -> <<"OPTION">>;
 binary_method(connect) -> <<"CONNECT">>;
-binary_method(trace)   -> <<"TRACE">>.
+binary_method(trace) -> <<"TRACE">>.
 
 atom_method(<<"GET">>) -> get;
 atom_method(<<"POST">>) -> post;
-atom_method(<<"PUT">>) ->  put;
+atom_method(<<"PUT">>) -> put;
 atom_method(<<"HEAD">>) -> head;
 atom_method(<<"DELETE">>) -> delete;
 atom_method(<<"PATCH">>) -> patch;
 atom_method(<<"OPTION">>) -> options;
 atom_method(<<"CONNECT">>) -> connect;
 atom_method(<<"TRACE">>) -> trace.
-
 
 assert_module_api_specs(ModuleApiSpec) ->
     case [E || E = {error, _} <- ModuleApiSpec] of
