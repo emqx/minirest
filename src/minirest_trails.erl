@@ -30,13 +30,17 @@ trails_schemas(Options) ->
         fun(Module) -> api_spec(Security, Module) end, Modules, 30000
     ),
     assert_module_api_specs(ModuleApiSpecList),
-    {Trails0, Schemas} = trails_schemas(Options, ModuleApiSpecList),
+    {Trails0, Schemas, ErrorCodes} = trails_schemas(Options, ModuleApiSpecList),
     case maps:get(swagger_support, Options, true) of
         false ->
-            {Trails0, Schemas};
+            {Trails0, Schemas, ErrorCodes};
         _ ->
             Name = maps:get(name, Options),
-            {Trails0 ++ trails:trails([{cowboy_swagger_handler, #{server => Name}}]), Schemas}
+            {
+                Trails0 ++ trails:trails([{cowboy_swagger_handler, #{server => Name}}]),
+                Schemas,
+                ErrorCodes
+            }
     end.
 
 modules(Options) ->
@@ -53,21 +57,31 @@ trails_schemas(Options, ModuleApiSpecList) ->
     Authorization = maps:get(authorization, Options, undefined),
     Log = maps:get(log, Options, undefined),
     Fun =
-        fun(ModuleApiSpec, {Trails, Schemas}) ->
-            {Trails0, Schemas0} = trails_schemas(BasePath, Authorization, Log, ModuleApiSpec),
-            {lists:append(Trails, Trails0), lists:append(Schemas, Schemas0)}
+        fun(ModuleApiSpec, {Trails, Schemas, ErrorCodes}) ->
+            {Trails0, Schemas0, ErrorCodes0} = trails_schemas(
+                BasePath, Authorization, Log, ModuleApiSpec
+            ),
+            {Trails ++ Trails0, Schemas ++ Schemas0, ErrorCodes ++ ErrorCodes0}
         end,
-    lists:foldl(Fun, {[], []}, ModuleApiSpecList).
+    {Trails, Schemas, ErrorCodes} = lists:foldl(Fun, {[], [], []}, ModuleApiSpecList),
+    {Trails, Schemas, lists:usort(ErrorCodes)}.
 
 trails_schemas(BasePath, Authorization, Log, {Module, {Apis, Schemas}}) ->
-    Trails = [trails_schemas(BasePath, Authorization, Log, Module, Api) || Api <- Apis],
-    {Trails, Schemas}.
+    {Trails, ErrorCodes} = lists:foldl(
+        fun(Api, {TrailsAcc, ErrorCodesAcc}) ->
+            {Trails0, ErrorCodes0} = trails_schemas(BasePath, Authorization, Log, Module, Api),
+            {[Trails0 | TrailsAcc], ErrorCodes0 ++ ErrorCodesAcc}
+        end,
+        {[], []},
+        Apis
+    ),
+    {lists:reverse(Trails), Schemas, ErrorCodes}.
 
 trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function}) ->
     trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, #{}});
 trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, Options}) ->
     Fun =
-        fun(Method, MethodDef, MethodStates) ->
+        fun(Method, MethodDef, {MethodStatesAcc, ErrorCodesAcc}) ->
             #{responses := Responses} = MethodDef,
             ErrorCodes = maps:fold(fun get_error_codes/3, [], Responses),
             Security = maps:get(security, MethodDef, []),
@@ -80,13 +94,15 @@ trails_schemas(BasePath, Authorization, Log, Module, {Path, Metadata, Function, 
                 log_meta = maps:get(log_meta, MethodDef, #{}),
                 error_codes = ErrorCodes
             },
-            minirest_info_api:add_codes(ErrorCodes),
-            maps:put(binary_method(Method), HandlerState, MethodStates)
+            {
+                maps:put(binary_method(Method), HandlerState, MethodStatesAcc),
+                ErrorCodes ++ ErrorCodesAcc
+            }
         end,
-    MethodStates = maps:fold(Fun, #{}, Metadata),
+    {MethodStates, ErrorCodes} = maps:fold(Fun, {#{}, []}, Metadata),
     HandlerState = #{path => Path, log => Log, methods => MethodStates},
     CompletePath = append_base_path(BasePath, Path),
-    trails:trail(CompletePath, ?HANDLER, HandlerState, Metadata).
+    {trails:trail(CompletePath, ?HANDLER, HandlerState, Metadata), ErrorCodes}.
 
 -define(NEST_CODE_KEYS, [
     <<"content">>,
