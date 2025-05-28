@@ -56,27 +56,19 @@ update_dispatch(Name) ->
     [Name, _Transport, _SocketOpts, _Protocol, StartArgs] =
         ranch_server:get_listener_start_args(Name),
     #{env := #{options := Options}} = StartArgs,
-    Dispatch =
-        #{
-            dispatch := NewDispatch
-        } = generate_dispatch(Options),
-    persistent_term:put(Name, NewDispatch),
-    SwaggerSupport = maps:get(swagger_support, Options, true),
-    SwaggerSupport andalso setup_swagger(Name, Options, Dispatch),
-    Protocol = #{env := Env} = ranch:get_protocol_options(Name),
-    ranch:set_protocol_options(Name, Protocol#{env => maps:remove(options, Env)}),
-    ok.
-
-setup_swagger(Name, Options, Dispatch) ->
     #{
+        dispatch := NewDispatch,
         schemas := Schemas,
         trials := Trails,
         error_codes := ErrorCodes
-    } = Dispatch,
+    } = generate_dispatch(Options),
+    persistent_term:put(Name, NewDispatch),
     set_swagger_global_spec(Options),
     trails:store(Name, Trails),
     cowboy_swagger:add_definitions(Schemas),
     minirest_info_api:add_codes(ErrorCodes),
+    Protocol = #{env := Env} = ranch:get_protocol_options(Name),
+    ranch:set_protocol_options(Name, Protocol#{env => maps:remove(options, Env)}),
     ok.
 
 generate_dispatch(Options) ->
