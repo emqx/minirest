@@ -59,25 +59,27 @@ update_dispatch(Name) ->
     #{
         dispatch := NewDispatch,
         schemas := Schemas,
-        trials := Trails
+        trials := Trails,
+        error_codes := ErrorCodes
     } = generate_dispatch(Options),
     persistent_term:put(Name, NewDispatch),
-    SwaggerSupport = maps:get(swagger_support, Options, true),
-    SwaggerSupport andalso set_swagger_global_spec(Options),
-    SwaggerSupport andalso trails:store(Name, Trails),
-    SwaggerSupport andalso [cowboy_swagger:add_definition(Schema) || Schema <- Schemas],
+    set_swagger_global_spec(Options),
+    trails:store(Name, Trails),
+    cowboy_swagger:add_definitions(Schemas),
+    minirest_info_api:add_codes(ErrorCodes),
     Protocol = #{env := Env} = ranch:get_protocol_options(Name),
     ranch:set_protocol_options(Name, Protocol#{env => maps:remove(options, Env)}),
     ok.
 
 generate_dispatch(Options) ->
     [{_Host0, _CowField0, Routers}] = merge_dispatch([], Options),
-    {Trails, Schemas} = minirest_trails:trails_schemas(Options),
+    {Trails, Schemas, ErrorCodes} = minirest_trails:trails_schemas(Options),
     [{Host, CowField, RestRouters}] = trails:single_host_compile(Trails),
     #{
         dispatch => [{Host, CowField, RestRouters ++ Routers}],
         schemas => Schemas,
-        trials => Trails
+        trials => Trails,
+        error_codes => ErrorCodes
     }.
 
 stop(Name) ->

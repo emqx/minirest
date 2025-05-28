@@ -90,8 +90,13 @@ set_codes(NewCodes) ->
     end.
 
 codes() ->
-    case application:get_env(cowboy_swagger, global_spec, #{}) of
-        #{components := #{schemas := #{minirest_api_error_codes := #{enum := Codes}}}} ->
+    GlobalSpec = cowboy_swagger:get_global_spec(),
+    case GlobalSpec of
+        #{
+            <<"components">> := #{
+                <<"schemas">> := #{<<"minirest_api_error_codes">> := #{<<"enum">> := Codes}}
+            }
+        } ->
             Codes;
         _ ->
             []

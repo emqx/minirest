@@ -39,7 +39,7 @@ init_per_suite(Config) ->
     Config.
 
 end_per_suite(_Config) ->
-    minirest:stop(?SERVER_NAME).
+    ok.
 
 init_per_testcase(t_handler_meta_in_auth, Config) ->
     ok = start_minirest(
@@ -121,7 +121,7 @@ start_minirest(MinirestOptions0) ->
     MinirestOptions = maps:merge(
         #{
             base_path => "",
-            modules => [?HANDLER_MODULE],
+            modules => [?HANDLER_MODULE, minirest_info_api],
             authorization => {?HANDLER_MODULE, authorize1},
             dispatch => [{"/[...]", ?HANDLER_MODULE, []}],
             protocol => http,
