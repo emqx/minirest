@@ -136,6 +136,8 @@ log_start_result({error, no_cert = Reason}, Log) ->
     ?LOG(error, Log#{
         msg => ?FAILED_MSG, description => "no_certificate_provided;", reason => Reason
     });
+log_start_result({error, {already_started, Pid}}, Log) ->
+    ?LOG(info, Log#{msg => "listener_already_started", pid => Pid});
 %% copy from ranch.erl line:162
 log_start_result(
     {error, {{shutdown, {failed_to_start_child, ranch_acceptors_sup, Reason}}, _}}, Log0
@@ -148,7 +150,9 @@ log_start_result(
             ?LOG(error, Log#{description => "file_busy"});
         _ ->
             ?LOG(error, Log)
-    end.
+    end;
+log_start_result({error, Reason}, Log) ->
+    ?LOG(error, Log#{msg => "error_starting_listener", reason => Reason}).
 
 get_port(L) when is_list(L) -> proplists:get_value(port, L);
 get_port(#{port := Port}) -> Port;
