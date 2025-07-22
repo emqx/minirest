@@ -28,7 +28,8 @@
     qs_params/2,
     auth_meta_in_filter/2,
     auth_meta_in_handler/2,
-    handler_meta_in_auth/2
+    handler_meta_in_auth/2,
+    post_large_body/2
 ]).
 
 api_spec() ->
@@ -40,7 +41,8 @@ api_spec() ->
             qs_params(),
             auth_meta_in_filter(),
             auth_meta_in_handler(),
-            handler_meta_in_auth()
+            handler_meta_in_auth(),
+            post_large_body()
         ],
         []
     }.
@@ -124,6 +126,20 @@ handler_meta_in_auth() ->
     },
     {"/handler_meta_in_auth", MetaData, handler_meta_in_auth}.
 
+post_large_body() ->
+    MetaData = #{
+        post => #{
+            description => "post large body",
+            responses => text_plain_200_response(),
+            security => [#{application => []}]
+        }
+    },
+    {"/post_large_body", MetaData, post_large_body}.
+
+%%--------------------------------------------------------------------
+%% Handlers
+%%--------------------------------------------------------------------
+
 authorize1(_Req) ->
     {ok, #{message => <<"hello from authorize">>}}.
 
@@ -156,6 +172,9 @@ auth_meta_in_handler(get, #{auth_meta := #{message := Message}}) ->
 
 handler_meta_in_auth(get, #{auth_meta := #{message := Message}}) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, Message}.
+
+post_large_body(post, #{body := _Body}) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 %%--------------------------------------------------------------------
 %% Helpers

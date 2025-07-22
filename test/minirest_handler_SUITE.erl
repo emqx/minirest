@@ -31,11 +31,13 @@ all() ->
         t_qs_params,
         t_auth_meta_in_filter,
         t_auth_meta_in_handler,
-        t_handler_meta_in_auth
+        t_handler_meta_in_auth,
+        t_post_large_body
     ].
 
 init_per_suite(Config) ->
     application:ensure_all_started(minirest),
+    application:ensure_all_started(hackney),
     Config.
 
 end_per_suite(_Config) ->
@@ -104,6 +106,15 @@ t_handler_meta_in_auth(_Config) ->
         }},
         httpc:request(address() ++ "/handler_meta_in_auth")
     ).
+
+t_post_large_body(_Config) ->
+    Data100KB = iolist_to_binary([$s || _ <- lists:seq(1, 100_000)]),
+    Data100MB = [Data100KB || _ <- lists:seq(1, 1000)],
+    Json100MB = jsx:encode(Data100MB),
+    URL = address() ++ "/post_large_body",
+    Headers = [{<<"content-type">>, <<"application/json">>}],
+    {ok, 200, _, Ref} = hackney:request(post, URL, Headers, Json100MB, []),
+    ?assertEqual({ok, <<"OK">>}, hackney:body(Ref)).
 
 %%--------------------------------------------------------------------
 %% Helpers

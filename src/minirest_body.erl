@@ -58,7 +58,7 @@ decoder(Request) ->
     end.
 
 json_decoder(Request) ->
-    {ok, Body, NRequest} = cowboy_req:read_body(Request),
+    {ok, Body, NRequest} = binary_decoder(Request),
     try
         {ok, jsx:decode(Body, [return_maps]), NRequest}
     catch
@@ -111,8 +111,8 @@ binary_decoder(Request) ->
 
 binary_decoder(Request, Acc) ->
     case cowboy_req:read_body(Request) of
-        {more, Bin, NewRequest} -> binary_decoder(NewRequest, <<Acc/binary, Bin/binary>>);
-        {ok, Bin, DoneRequest} -> {ok, <<Acc/binary, Bin/binary>>, DoneRequest}
+        {more, Bin, NewRequest} -> binary_decoder(NewRequest, [Acc | Bin]);
+        {ok, Bin, DoneRequest} -> {ok, iolist_to_binary([Acc | Bin]), DoneRequest}
     end.
 
 %%==============================================================================================
