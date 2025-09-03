@@ -181,7 +181,7 @@ match_path(_Path, _Pattern, _Bindings) ->
 
 parse_params(Req) ->
     QueryParams = cowboy_req:parse_qs(Req),
-    BodyParams = case cowboy_req:has_body(Req) of
+    BodyParams = case cowboy_req:has_body(Req) andalso cowboy_req:body_length(Req) > 0 of
                      true  -> {_, Body, _} = cowboy_req:read_body(Req),
                               json_decode(Body);
                      false -> []
