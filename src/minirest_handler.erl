@@ -62,7 +62,7 @@ handle(Request, #{path := Path, methods := Methods} = State) ->
             };
         {ok, Handler = #handler{log_meta = LogMeta, method = MethodAtom}} ->
             init_log_meta(LogMeta#{operation_id => OperationId, method => MethodAtom}),
-            case do_authorize(Request, Handler) of
+            case do_authorize(Request, Path, Handler) of
                 {ok, AuthMeta} ->
                     update_log_meta(AuthMeta),
                     case do_parse_params(Request, AuthMeta) of
@@ -112,17 +112,17 @@ trans_allow([], Res) -> Res;
 trans_allow([Method], Res) -> <<Res/binary, Method/binary>>;
 trans_allow([Method | Allow], Res) -> trans_allow(Allow, <<Res/binary, Method/binary, ", ">>).
 
-do_authorize(Request, #handler{
+do_authorize(Request, Path, #handler{
     authorization = {M, F}, method = Method, module = Mod, function = Fun
 }) ->
-    HandlerInfo = #{method => Method, module => Mod, function => Fun},
+    HandlerInfo = #{method => Method, module => Mod, function => Fun, path => Path},
     case erlang:function_exported(M, F, 2) of
         true ->
             erlang:apply(M, F, [Request, HandlerInfo]);
         false ->
             erlang:apply(M, F, [Request])
     end;
-do_authorize(_Request, _Handler) ->
+do_authorize(_Request, _Path, _Handler) ->
     {ok, #{}}.
 
 do_parse_params(Request, AuthMeta) ->
