@@ -22,6 +22,7 @@
 -export([
     authorize1/1,
     authorize2/2,
+    authorize_path/2,
     lazy_body/2,
     binary_body/2,
     flex_error/2,
@@ -29,6 +30,7 @@
     auth_meta_in_filter/2,
     auth_meta_in_handler/2,
     handler_meta_in_auth/2,
+    route_path_in_auth/2,
     post_large_body/2
 ]).
 
@@ -42,6 +44,7 @@ api_spec() ->
             auth_meta_in_filter(),
             auth_meta_in_handler(),
             handler_meta_in_auth(),
+            route_path_in_auth(),
             post_large_body()
         ],
         []
@@ -126,6 +129,16 @@ handler_meta_in_auth() ->
     },
     {"/handler_meta_in_auth", MetaData, handler_meta_in_auth}.
 
+route_path_in_auth() ->
+    MetaData = #{
+        get => #{
+            description => "route path in auth",
+            responses => text_plain_200_response(),
+            security => [#{application => []}]
+        }
+    },
+    {"/route_path_in_auth/:id", MetaData, route_path_in_auth}.
+
 post_large_body() ->
     MetaData = #{
         post => #{
@@ -148,6 +161,9 @@ authorize2(_Req, #{module := Module, function := Fun}) ->
         message =>
             <<"hello from ", (atom_to_binary(Module))/binary, ":", (atom_to_binary(Fun))/binary>>
     }}.
+
+authorize_path(_Req, #{path := Path}) ->
+    {ok, #{route_path => list_to_binary(Path)}}.
 
 lazy_body(get, _) ->
     BodyQH = qlc:table(fun() -> [<<"first">>, <<"second">>] end, []),
@@ -172,6 +188,9 @@ auth_meta_in_handler(get, #{auth_meta := #{message := Message}}) ->
 
 handler_meta_in_auth(get, #{auth_meta := #{message := Message}}) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, Message}.
+
+route_path_in_auth(get, #{auth_meta := #{route_path := RoutePath}}) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, RoutePath}.
 
 post_large_body(post, #{body := _Body}) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
