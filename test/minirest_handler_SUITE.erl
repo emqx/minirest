@@ -32,6 +32,7 @@ all() ->
         t_auth_meta_in_filter,
         t_auth_meta_in_handler,
         t_handler_meta_in_auth,
+        t_route_path_in_auth,
         t_post_large_body
     ].
 
@@ -46,6 +47,11 @@ end_per_suite(_Config) ->
 init_per_testcase(t_handler_meta_in_auth, Config) ->
     ok = start_minirest(
         #{authorization => {?HANDLER_MODULE, authorize2}}
+    ),
+    Config;
+init_per_testcase(t_route_path_in_auth, Config) ->
+    ok = start_minirest(
+        #{authorization => {?HANDLER_MODULE, authorize_path}}
     ),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -105,6 +111,19 @@ t_handler_meta_in_auth(_Config) ->
             "hello from minirest_test_handler:handler_meta_in_auth"
         }},
         httpc:request(address() ++ "/handler_meta_in_auth")
+    ).
+
+%% Verify that the authorize callback receives the route template path
+%% (e.g. "/route_path_in_auth/:id") rather than the actual request path
+%% (e.g. "/route_path_in_auth/42").
+t_route_path_in_auth(_Config) ->
+    ?assertMatch(
+        {ok, {
+            {_Version, 200, _Status},
+            _Headers,
+            "/route_path_in_auth/:id"
+        }},
+        httpc:request(address() ++ "/route_path_in_auth/42")
     ).
 
 t_post_large_body(_Config) ->
