@@ -19,4 +19,4 @@
 -export([encode/1]).
 
 encode(Body) ->
-    {ok, maps:merge(?DEFAULT_RESPONSE_HEADERS, #{<<"content-length">> => erlang:size(Body)}), Body}.
+    {ok, #{}, Body}.
