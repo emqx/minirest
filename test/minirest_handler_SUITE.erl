@@ -88,7 +88,7 @@ t_flex_error(_Config) ->
 t_qs_params(_Config) ->
     ?assertMatch(
         {ok, {{_Version, 200, _Status}, _Headers, "OK"}},
-        httpc:request(address() ++ "/qs_params?single=foo&array=foo&array=bar")
+        httpc:request(address() ++ "/qs_params?single=foo&array=foo&array=bar&array=baz")
     ).
 
 t_auth_meta_in_filter(_Config) ->
