@@ -136,7 +136,8 @@ do_parse_params(Request, AuthMeta) ->
     do_read_body(Request, Params).
 
 parse_qs(Request) ->
-    lists:foldl(
+    %% foldr so repeated params accumulate in request order
+    lists:foldr(
         fun({K, V}, MapAcc) ->
             maps:update_with(
                 K,

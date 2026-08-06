@@ -174,7 +174,7 @@ binary_body(get, _) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, Body}.
 
 qs_params(get, #{query_string := Qs}) ->
-    #{<<"single">> := <<"foo">>, <<"array">> := [<<"bar">>, <<"foo">>]} = Qs,
+    #{<<"single">> := <<"foo">>, <<"array">> := [<<"foo">>, <<"bar">>, <<"baz">>]} = Qs,
     {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 flex_error(get, _) ->
