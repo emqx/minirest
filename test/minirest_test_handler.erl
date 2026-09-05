@@ -31,7 +31,9 @@
     auth_meta_in_handler/2,
     handler_meta_in_auth/2,
     route_path_in_auth/2,
-    post_large_body/2
+    post_large_body/2,
+    set_cookie/2,
+    set_cookies/2
 ]).
 
 api_spec() ->
@@ -45,7 +47,9 @@ api_spec() ->
             auth_meta_in_handler(),
             handler_meta_in_auth(),
             route_path_in_auth(),
-            post_large_body()
+            post_large_body(),
+            set_cookie(),
+            set_cookies()
         ],
         []
     }.
@@ -149,6 +153,24 @@ post_large_body() ->
     },
     {"/post_large_body", MetaData, post_large_body}.
 
+set_cookie() ->
+    MetaData = #{
+        get => #{
+            description => "set one response cookie",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/set_cookie", MetaData, set_cookie}.
+
+set_cookies() ->
+    MetaData = #{
+        get => #{
+            description => "set two response cookies",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/set_cookies", MetaData, set_cookies}.
+
 %%--------------------------------------------------------------------
 %% Handlers
 %%--------------------------------------------------------------------
@@ -194,6 +216,21 @@ route_path_in_auth(get, #{auth_meta := #{route_path := RoutePath}}) ->
 
 post_large_body(post, #{body := _Body}) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
+
+set_cookie(get, _) ->
+    Cookie = iolist_to_binary(
+        cow_cookie:setcookie(<<"one">>, <<"1">>, #{path => <<"/api">>, http_only => true})
+    ),
+    Headers = #{<<"content-type">> => <<"test/plain">>, <<"set-cookie">> => Cookie},
+    {200, Headers, <<"OK">>}.
+
+set_cookies(get, _) ->
+    Cookies = [
+        iolist_to_binary(cow_cookie:setcookie(<<"one">>, <<"1">>, #{})),
+        iolist_to_binary(cow_cookie:setcookie(<<"two">>, <<"2">>, #{}))
+    ],
+    Headers = #{<<"content-type">> => <<"test/plain">>, <<"set-cookie">> => Cookies},
+    {200, Headers, <<"OK">>}.
 
 %%--------------------------------------------------------------------
 %% Helpers

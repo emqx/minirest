@@ -258,9 +258,13 @@ reply(BadReturn, Req, _Handler) ->
     {StatusCode,
         cowboy_req:reply(StatusCode, #{<<"content-type">> => <<"text/plain">>}, Body, Req)}.
 
-reply_with_body(StatusCode, Headers, Body, Req) when is_binary(Body) ->
+reply_with_body(StatusCode, Headers0, Body, Req0) ->
+    {Headers, Req} = take_resp_cookies(Headers0, Req0),
+    do_reply_with_body(StatusCode, Headers, Body, Req).
+
+do_reply_with_body(StatusCode, Headers, Body, Req) when is_binary(Body) ->
     cowboy_req:reply(StatusCode, Headers, Body, Req);
-reply_with_body(StatusCode, Headers, {qlc_handle, _} = BodyQH, Req0) ->
+do_reply_with_body(StatusCode, Headers, {qlc_handle, _} = BodyQH, Req0) ->
     Req1 = cowboy_req:stream_reply(StatusCode, Headers, Req0),
     qlc:fold(
         fun(Data, Req) ->
@@ -272,6 +276,47 @@ reply_with_body(StatusCode, Headers, {qlc_handle, _} = BodyQH, Req0) ->
     ),
     cowboy_req:stream_body(<<>>, fin, Req1),
     Req1.
+
+%% `set-cookie' is the one response header cowboy does not take from the
+%% headers map. A response may carry several of them, and a map holds one
+%% value per name, so cowboy keeps cookies in the request's `resp_cookies'
+%% field and fills the map key itself at reply time. Passing the header in
+%% exits with `response_error' on cowboy 2.10 and later, and clobbers any
+%% cookie already set on the request before that. Move it to where cowboy
+%% expects it instead.
+%%
+%% The value is one cookie as a binary, or several as a list of binaries,
+%% each already formatted by `cow_cookie:setcookie/3'. The header name must
+%% be lower case, as it must be for HTTP/2 anyway.
+take_resp_cookies(Headers, Req) ->
+    case maps:take(<<"set-cookie">>, Headers) of
+        error ->
+            {Headers, Req};
+        {Cookies, Headers1} ->
+            {Headers1, put_resp_cookies(Cookies, Req)}
+    end.
+
+put_resp_cookies(Cookie, Req) when is_binary(Cookie) ->
+    put_resp_cookies([Cookie], Req);
+put_resp_cookies(Cookies, Req) when is_list(Cookies) ->
+    RespCookies = maps:get(resp_cookies, Req, #{}),
+    Req#{resp_cookies => lists:foldl(fun put_resp_cookie/2, RespCookies, Cookies)};
+put_resp_cookies(Cookies, _Req) ->
+    error({invalid_set_cookie_header, Cookies}).
+
+%% Cowboy keys `resp_cookies' by cookie name, so that setting the same cookie
+%% twice replaces it instead of sending two headers the browser cannot
+%% reconcile. Key it the same way.
+put_resp_cookie(Cookie, Acc) when is_binary(Cookie) ->
+    Acc#{resp_cookie_name(Cookie) => Cookie};
+put_resp_cookie(Cookie, _Acc) ->
+    error({invalid_set_cookie_header, Cookie}).
+
+resp_cookie_name(Cookie) ->
+    case binary:split(Cookie, <<"=">>) of
+        [Name, _Value] -> Name;
+        [Name] -> Name
+    end.
 
 maybe_ignore_code_check(401, _Code) -> true;
 maybe_ignore_code_check(403, _Code) -> true;
