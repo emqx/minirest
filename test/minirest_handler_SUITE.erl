@@ -33,7 +33,9 @@ all() ->
         t_auth_meta_in_handler,
         t_handler_meta_in_auth,
         t_route_path_in_auth,
-        t_post_large_body
+        t_post_large_body,
+        t_set_cookie,
+        t_set_cookies
     ].
 
 init_per_suite(Config) ->
@@ -135,9 +137,35 @@ t_post_large_body(_Config) ->
     {ok, 200, _, Ref} = hackney:request(post, URL, Headers, Json100MB, []),
     ?assertEqual({ok, <<"OK">>}, hackney:body(Ref)).
 
+%% A handler that returns a `set-cookie' header gets it sent as a cookie,
+%% instead of cowboy rejecting the response.
+t_set_cookie(_Config) ->
+    {ok, 200, Headers, _Ref} = hackney:request(get, address() ++ "/set_cookie"),
+    %% The exact attribute list depends on the cowlib version, so assert on
+    %% the pair and the attributes the handler asked for.
+    [Cookie] = set_cookie_headers(Headers),
+    ?assertEqual(<<"one=1">>, cookie_pair(Cookie)),
+    ?assertNotEqual(nomatch, binary:match(Cookie, <<"Path=/api">>)),
+    ?assertNotEqual(nomatch, binary:match(Cookie, <<"HttpOnly">>)).
+
+%% Several cookies are sent as one `set-cookie' header each, which is the
+%% only correct encoding for them.
+t_set_cookies(_Config) ->
+    {ok, 200, Headers, _Ref} = hackney:request(get, address() ++ "/set_cookies"),
+    ?assertEqual(
+        [<<"one=1">>, <<"two=2">>],
+        lists:sort([cookie_pair(C) || C <- set_cookie_headers(Headers)])
+    ).
+
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
+
+set_cookie_headers(Headers) ->
+    [V || {K, V} <- Headers, string:lowercase(K) =:= <<"set-cookie">>].
+
+cookie_pair(Cookie) ->
+    hd(binary:split(Cookie, <<";">>)).
 
 start_minirest() ->
     start_minirest(#{}).

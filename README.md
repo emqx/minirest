@@ -99,6 +99,23 @@ hello(Method, #{bindings := Bindins,
 
 ```
 
+## Set a response cookie
+
+Return the formatted cookie under the lower case `set-cookie` key of the
+response headers. Use `cow_cookie:setcookie/3` to build it. Pass a list of
+binaries to send several cookies, which minirest sends as one `set-cookie`
+header each.
+
+```erlang
+login(post, _Params) ->
+    Cookie = iolist_to_binary(
+        cow_cookie:setcookie(<<"session">>, Token, #{
+            path => <<"/api">>, http_only => true, secure => true, max_age => 3600
+        })
+    ),
+    {200, #{<<"set-cookie">> => Cookie}, #{}}.
+```
+
 ## Start your HTTP server
 
 ```erlang
