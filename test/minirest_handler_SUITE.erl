@@ -35,7 +35,8 @@ all() ->
         t_route_path_in_auth,
         t_post_large_body,
         t_set_cookie,
-        t_set_cookies
+        t_set_cookies,
+        t_update_log_meta_outside_request
     ].
 
 init_per_suite(Config) ->
@@ -156,6 +157,12 @@ t_set_cookies(_Config) ->
         [<<"one=1">>, <<"two=2">>],
         lists:sort([cookie_pair(C) || C <- set_cookie_headers(Headers)])
     ).
+
+%% `update_log_meta/1' does nothing in a process that does not handle a
+%% minirest request.
+t_update_log_meta_outside_request(_Config) ->
+    ?assertEqual(ok, minirest_handler:update_log_meta(#{source => <<"nobody">>})),
+    ?assertEqual(undefined, erlang:get({minirest_handler, meta})).
 
 %%--------------------------------------------------------------------
 %% Helpers
