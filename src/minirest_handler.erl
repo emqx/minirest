@@ -40,9 +40,17 @@ init(Request0, State) ->
 %% or it may be an interactive endpoint whose metadata cannot be determined in one step.
 %% Here, the metadata is moved from the function return to the process dictionary,
 %% so that the metadata in the endpoint can be updated.
+%%
+%% The call does nothing when the calling process does not handle a minirest
+%% request, for example when a test calls an authorize callback directly.
 update_log_meta(New) ->
-    Meta = get_log_meta(),
-    erlang:put(?META_KEY, maps:merge(Meta, New)).
+    case get_log_meta() of
+        undefined ->
+            ok;
+        Meta ->
+            erlang:put(?META_KEY, maps:merge(Meta, New)),
+            ok
+    end.
 
 %%%==============================================================================================
 %% internal

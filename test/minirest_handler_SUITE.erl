@@ -33,7 +33,8 @@ all() ->
         t_auth_meta_in_handler,
         t_handler_meta_in_auth,
         t_route_path_in_auth,
-        t_post_large_body
+        t_post_large_body,
+        t_update_log_meta_outside_request
     ].
 
 init_per_suite(Config) ->
@@ -134,6 +135,12 @@ t_post_large_body(_Config) ->
     Headers = [{<<"content-type">>, <<"application/json">>}],
     {ok, 200, _, Ref} = hackney:request(post, URL, Headers, Json100MB, []),
     ?assertEqual({ok, <<"OK">>}, hackney:body(Ref)).
+
+%% `update_log_meta/1' does nothing in a process that does not handle a
+%% minirest request.
+t_update_log_meta_outside_request(_Config) ->
+    ?assertEqual(ok, minirest_handler:update_log_meta(#{source => <<"nobody">>})),
+    ?assertEqual(undefined, erlang:get({minirest_handler, meta})).
 
 %%--------------------------------------------------------------------
 %% Helpers
