@@ -23,6 +23,7 @@
     authorize1/1,
     authorize2/2,
     authorize_path/2,
+    authorize_deny/2,
     lazy_body/2,
     binary_body/2,
     flex_error/2,
@@ -186,6 +187,9 @@ authorize2(_Req, #{module := Module, function := Fun}) ->
 
 authorize_path(_Req, #{path := Path}) ->
     {ok, #{route_path => list_to_binary(Path)}}.
+
+authorize_deny(_Req, _HandlerInfo) ->
+    {with_log_meta, #{source => <<"denied-user">>}, {403, 'FORBIDDEN', <<"not allowed">>}}.
 
 lazy_body(get, _) ->
     BodyQH = qlc:table(fun() -> [<<"first">>, <<"second">>] end, []),
