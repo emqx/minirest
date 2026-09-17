@@ -96,24 +96,12 @@ handle(Request, #{path := Path, methods := Methods} = State) ->
                             {StatusCode, NRequest1} = reply(ParseErr, Request, Handler),
                             {StatusCode, NRequest1}
                     end;
-                AuthFailed0 ->
-                    AuthFailed = take_auth_log_meta(AuthFailed0),
+                AuthFailed ->
                     prepend_log_meta(#{failure => failed_log_meta(AuthFailed)}),
                     {StatusCode, NRequest1} = reply(AuthFailed, Request, Handler),
                     {StatusCode, NRequest1}
             end
     end.
-
-%% An authorize callback returns `{with_log_meta, LogMeta, Response}' to add
-%% log meta to a failed authorization, for example the authenticated caller
-%% that is not allowed to use the endpoint. `LogMeta' is merged into the log
-%% meta the same way as the meta of a successful authorization. Only
-%% `Response' is sent to the client.
-take_auth_log_meta({with_log_meta, LogMeta, Response}) when is_map(LogMeta) ->
-    ok = update_log_meta(LogMeta),
-    Response;
-take_auth_log_meta(Response) ->
-    Response.
 
 failed_log_meta({Code, #{} = Meta}) when is_integer(Code) -> Meta;
 failed_log_meta({Code, _Response}) when is_integer(Code) -> #{};

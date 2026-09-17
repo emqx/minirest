@@ -116,29 +116,12 @@ login(post, _Params) ->
     {200, #{<<"set-cookie">> => Cookie}, #{}}.
 ```
 
-## Add log meta to a failed authorization
+## Add log meta
 
-An `authorization` callback returns `{ok, AuthMeta}` to accept a request.
-minirest merges `AuthMeta` into the log meta that the `log` hook receives.
-
-To reject a request and still add log meta, return
-`{with_log_meta, LogMeta, Response}`. minirest merges `LogMeta` into the log
-meta in the same way, and sends only `Response` to the client. Use it to
-record an authenticated caller that is not allowed to use the endpoint.
-
-```erlang
-authorize(Req, HandlerInfo) ->
-    case check(Req, HandlerInfo) of
-        {ok, User} ->
-            {ok, #{source => User}};
-        {forbidden, User} ->
-            {with_log_meta, #{source => User},
-                {403, 'FORBIDDEN', <<"Not allowed">>}}
-    end.
-```
-
-A handler can also call `minirest_handler:update_log_meta/1` to add log meta.
-The call does nothing in a process that does not handle a minirest request.
+Call `minirest_handler:update_log_meta/1` from a handler or an
+`authorization` callback to add meta for the `log` hook. The call does
+nothing in a process that does not handle a minirest request, for example
+when a test calls the callback directly.
 
 ## Start your HTTP server
 

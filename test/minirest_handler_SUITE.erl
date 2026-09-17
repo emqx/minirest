@@ -36,7 +36,6 @@ all() ->
         t_post_large_body,
         t_set_cookie,
         t_set_cookies,
-        t_auth_failure_log_meta,
         t_update_log_meta_outside_request
     ].
 
@@ -56,15 +55,6 @@ init_per_testcase(t_handler_meta_in_auth, Config) ->
 init_per_testcase(t_route_path_in_auth, Config) ->
     ok = start_minirest(
         #{authorization => {?HANDLER_MODULE, authorize_path}}
-    ),
-    Config;
-init_per_testcase(t_auth_failure_log_meta, Config) ->
-    Self = self(),
-    ok = start_minirest(
-        #{
-            authorization => {?HANDLER_MODULE, authorize_deny},
-            log => fun(Meta, _Req) -> Self ! {log_meta, Meta} end
-        }
     ),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -167,22 +157,6 @@ t_set_cookies(_Config) ->
         [<<"one=1">>, <<"two=2">>],
         lists:sort([cookie_pair(C) || C <- set_cookie_headers(Headers)])
     ).
-
-%% An authorize callback that returns `{with_log_meta, LogMeta, Response}' adds
-%% `LogMeta' to the log meta. The client gets only `Response'.
-t_auth_failure_log_meta(_Config) ->
-    {ok, {{_Version, 403, _Status}, _Headers, Body}} =
-        httpc:request(address() ++ "/auth_meta_in_handler"),
-    ?assertEqual(
-        #{<<"code">> => <<"FORBIDDEN">>, <<"message">> => <<"not allowed">>},
-        jsx:decode(iolist_to_binary(Body), [return_maps])
-    ),
-    receive
-        {log_meta, Meta} ->
-            ?assertMatch(#{source := <<"denied-user">>, code := 403, failure := _}, Meta)
-    after 5000 ->
-        ct:fail(log_hook_not_called)
-    end.
 
 %% `update_log_meta/1' does nothing in a process that does not handle a
 %% minirest request.
