@@ -99,6 +99,13 @@ hello(Method, #{bindings := Bindins,
 
 ```
 
+## Add log meta
+
+Call `minirest_handler:update_log_meta/1` from a handler or an
+`authorization` callback to add meta for the `log` hook. The call does
+nothing in a process that does not handle a minirest request, for example
+when a test calls the callback directly.
+
 ## Start your HTTP server
 
 ```erlang
