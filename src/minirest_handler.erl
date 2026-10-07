@@ -218,11 +218,11 @@ apply_callback(Request, Params, #{path := Path}, Handler) ->
 
 %% The handler arguments and the error reason can hold request data,
 %% such as headers and body fields. They are kept as a shape only:
-%% atoms, pids, ports, references, funs, atom map keys and binary map keys
-%% up to ?SCRUB_KEY_MAX_BYTES stay as they are, other binaries and strings
-%% become their size, and numbers become their type. Terms nested deeper
-%% than ?SCRUB_DEPTH become '...', and lists, tuples and maps keep at most
-%% ?SCRUB_WIDTH elements.
+%% atoms, numbers, pids, ports, references, funs, atom map keys and binary
+%% map keys up to ?SCRUB_KEY_MAX_BYTES stay as they are, and other binaries
+%% and strings become their size. Terms nested deeper than ?SCRUB_DEPTH
+%% become '...', and lists, tuples and maps keep at most ?SCRUB_WIDTH
+%% elements.
 scrub_reason(R) ->
     scrub(R, ?SCRUB_DEPTH).
 
@@ -236,15 +236,12 @@ scrub_args(A) when is_list(A) -> [scrub(Arg, ?SCRUB_DEPTH) || Arg <- A];
 scrub_args(A) -> A.
 
 scrub(T, _D) when
-    is_atom(T) orelse is_pid(T) orelse is_port(T) orelse is_reference(T) orelse is_function(T)
+    is_atom(T) orelse is_number(T) orelse is_pid(T) orelse is_port(T) orelse
+        is_reference(T) orelse is_function(T)
 ->
     T;
 scrub(T, _D) when is_bitstring(T) ->
     iolist_to_binary(io_lib:format("...(~b bytes)", [byte_size(T)]));
-scrub(T, _D) when is_integer(T) ->
-    '<integer>';
-scrub(T, _D) when is_float(T) ->
-    '<float>';
 scrub([], _D) ->
     [];
 scrub(_T, 0) ->
