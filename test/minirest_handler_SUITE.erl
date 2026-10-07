@@ -22,6 +22,8 @@
 -define(PORT, 8088).
 -define(SERVER_NAME, test_server).
 -define(HANDLER_MODULE, minirest_test_handler).
+-define(LOG_CAPTURE, minirest_handler_SUITE_log_capture).
+-define(AUTH_TOKEN, "Bearer token-must-not-appear-in-output").
 
 all() ->
     [
@@ -36,7 +38,12 @@ all() ->
         t_post_large_body,
         t_set_cookie,
         t_set_cookies,
-        t_update_log_meta_outside_request
+        t_update_log_meta_outside_request,
+        t_crash_hides_request,
+        t_crash_hides_reason_data,
+        t_crash_trace_keeps_location,
+        t_crash_trace_limits,
+        t_crash_response_format
     ].
 
 init_per_suite(Config) ->
@@ -57,11 +64,16 @@ init_per_testcase(t_route_path_in_auth, Config) ->
         #{authorization => {?HANDLER_MODULE, authorize_path}}
     ),
     Config;
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Case, Config) ->
     ok = start_minirest(),
+    case atom_to_list(Case) of
+        "t_crash_" ++ _ -> ok = add_log_capture();
+        _ -> ok
+    end,
     Config.
 
 end_per_testcase(_Case, _Config) ->
+    _ = logger:remove_handler(?LOG_CAPTURE),
     ok = stop_minirest().
 
 %%--------------------------------------------------------------------
@@ -164,6 +176,108 @@ t_update_log_meta_outside_request(_Config) ->
     ?assertEqual(ok, minirest_handler:update_log_meta(#{source => <<"nobody">>})),
     ?assertEqual(undefined, erlang:get({minirest_handler, meta})).
 
+%% A handler crash with the request in the stacktrace arguments does not
+%% put the authorization header value into the response or the log.
+t_crash_hides_request(_Config) ->
+    {ok, {{_, 500, _}, _, Body}} =
+        httpc:request(
+            get,
+            {address() ++ "/crash_function_clause", [{"authorization", ?AUTH_TOKEN}]},
+            [],
+            [{body_format, binary}]
+        ),
+    #{<<"code">> := <<"INTERNAL_ERROR">>, <<"message">> := Message} =
+        jsx:decode(Body, [return_maps]),
+    #{report := #{stacktrace := [{_, _, [get, Params, _Request], _} | _]}} =
+        Log = receive_crash_log(),
+    TokenSize = integer_to_binary(length(?AUTH_TOKEN)),
+    ?assertMatch(
+        #{headers := #{<<"authorization">> := <<"...(", TokenSize:2/binary, " bytes)">>}},
+        Params
+    ),
+    lists:foreach(
+        fun(Output) ->
+            ?assertEqual(nomatch, string:find(Output, "token-must-not-appear-in-output"))
+        end,
+        [Body, Message, io_lib:format("~0p", [Log])]
+    ).
+
+%% A handler crash with request data in the error reason does not put
+%% that data into the response or the log.
+t_crash_hides_reason_data(_Config) ->
+    Secret = <<"secret-must-not-appear-in-output">>,
+    {ok, {{_, 500, _}, _, Body}} =
+        httpc:request(
+            post,
+            {
+                address() ++ "/crash_badmatch",
+                [],
+                "application/json",
+                jsx:encode(#{<<"secret">> => Secret})
+            },
+            [],
+            [{body_format, binary}]
+        ),
+    #{report := #{reason := Reason}} = Log = receive_crash_log(),
+    SecretSize = integer_to_binary(byte_size(Secret)),
+    ?assertEqual({badmatch, <<"...(", SecretSize/binary, " bytes)">>}, Reason),
+    lists:foreach(
+        fun(Output) -> ?assertEqual(nomatch, string:find(Output, Secret)) end,
+        [Body, io_lib:format("~0p", [Log])]
+    ).
+
+%% The logged stacktrace still names the module, function, file and line
+%% of the crash, and shows the shape of the arguments.
+t_crash_trace_keeps_location(_Config) ->
+    {ok, {{_, 500, _}, _, _}} = httpc:request(address() ++ "/crash_function_clause"),
+    #{report := #{exception := error, reason := function_clause, stacktrace := Stack}} =
+        receive_crash_log(),
+    [{?HANDLER_MODULE, crash_function_clause, [get, #{body := _}, #{} = _Request], Location} | _] =
+        Stack,
+    ?assert(is_integer(proplists:get_value(line, Location))),
+    ?assertMatch(
+        "minirest_test_handler.erl", filename:basename(proplists:get_value(file, Location))
+    ).
+
+%% The logged arguments are cut at a fixed depth and a fixed number of
+%% map entries.
+t_crash_trace_limits(_Config) ->
+    Body = maps:from_list(
+        [
+            {iolist_to_binary(io_lib:format("k~2..0b", [I])), #{<<"a">> => #{<<"b">> => 1}}}
+         || I <- lists:seq(1, 20)
+        ]
+    ),
+    {ok, {{_, 500, _}, _, _}} =
+        httpc:request(
+            post,
+            {address() ++ "/crash_deep_body", [], "application/json", jsx:encode(Body)},
+            [],
+            []
+        ),
+    #{report := #{stacktrace := [{_, _, [post, #{body := Scrubbed}], _} | _]}} =
+        receive_crash_log(),
+    ?assertEqual(11, maps:size(Scrubbed)),
+    ?assertEqual('...', maps:get('...', Scrubbed)),
+    maps:foreach(
+        fun
+            ('...', _) -> ok;
+            (_K, V) -> ?assertEqual(#{<<"a">> => '...'}, V)
+        end,
+        Scrubbed
+    ).
+
+%% The response message for a crash keeps the `Class, Reason, Stacktrace' format.
+t_crash_response_format(_Config) ->
+    {ok, {{_, 500, _}, _, Body}} =
+        httpc:request(get, {address() ++ "/crash_plain", []}, [], [{body_format, binary}]),
+    #{<<"code">> := <<"INTERNAL_ERROR">>, <<"message">> := Message} =
+        jsx:decode(Body, [return_maps]),
+    ?assertMatch(
+        <<"error, boom, [{minirest_test_handler,crash_plain,2,[{file,", _/binary>>, Message
+    ),
+    _ = receive_crash_log().
+
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
@@ -173,6 +287,24 @@ set_cookie_headers(Headers) ->
 
 cookie_pair(Cookie) ->
     hd(binary:split(Cookie, <<";">>)).
+
+add_log_capture() ->
+    logger:add_handler(?LOG_CAPTURE, ?MODULE, #{level => warning, config => #{pid => self()}}).
+
+%% logger handler callback
+log(#{msg := {report, Report}, meta := #{mfa := {minirest_handler, _, _}}}, #{
+    config := #{pid := Pid}
+}) ->
+    Pid ! {crash_log, #{report => Report}};
+log(_Event, _Config) ->
+    ok.
+
+receive_crash_log() ->
+    receive
+        {crash_log, Log} -> Log
+    after 5000 ->
+        ct:fail(no_crash_log)
+    end.
 
 start_minirest() ->
     start_minirest(#{}).
