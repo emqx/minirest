@@ -24,6 +24,10 @@
 
 -define(META_KEY, {?MODULE, meta}).
 
+-define(SCRUB_DEPTH, 3).
+-define(SCRUB_WIDTH, 10).
+-define(SCRUB_KEY_MAX_BYTES, 64).
+
 %%==============================================================================================
 %% cowboy callback init
 -spec init(_, handler_state()) -> {ok, _, handler_state()}.
@@ -214,17 +218,14 @@ apply_callback(Request, Params, #{path := Path}, Handler) ->
     end.
 
 %% The handler arguments and the error reason can hold request data,
-%% such as headers and body fields. Only atoms are kept from the reason,
-%% and only module, function, arity, file and line from the stacktrace.
-scrub_reason(R) when is_atom(R) ->
-    R;
-scrub_reason(R) when is_tuple(R) ->
-    list_to_tuple([scrub_reason_element(E) || E <- tuple_to_list(R)]);
-scrub_reason(_R) ->
-    '_'.
-
-scrub_reason_element(E) when is_atom(E) -> E;
-scrub_reason_element(_E) -> '_'.
+%% such as headers and body fields. They are kept as a shape only:
+%% atoms, pids, ports, references, funs, atom map keys and binary map keys
+%% up to ?SCRUB_KEY_MAX_BYTES stay as they are, other binaries and strings
+%% become their size, and numbers become their type. Terms nested deeper
+%% than ?SCRUB_DEPTH become '...', and lists, tuples and maps keep at most
+%% ?SCRUB_WIDTH elements.
+scrub_reason(R) ->
+    scrub(R, ?SCRUB_DEPTH).
 
 scrub_stacktrace(S) ->
     [
@@ -232,8 +233,58 @@ scrub_stacktrace(S) ->
      || {M, F, A, Location} <- S
     ].
 
-scrub_args(A) when is_list(A) -> length(A);
+scrub_args(A) when is_list(A) -> [scrub(Arg, ?SCRUB_DEPTH) || Arg <- A];
 scrub_args(A) -> A.
+
+scrub(T, _D) when
+    is_atom(T) orelse is_pid(T) orelse is_port(T) orelse is_reference(T) orelse is_function(T)
+->
+    T;
+scrub(T, _D) when is_bitstring(T) ->
+    iolist_to_binary(io_lib:format("...(~b bytes)", [byte_size(T)]));
+scrub(T, _D) when is_integer(T) ->
+    '<integer>';
+scrub(T, _D) when is_float(T) ->
+    '<float>';
+scrub([], _D) ->
+    [];
+scrub(_T, 0) ->
+    '...';
+scrub(T, D) when is_list(T) ->
+    case io_lib:printable_unicode_list(T) of
+        true -> lists:flatten(io_lib:format("...(~b chars)", [length(T)]));
+        false -> scrub_list(T, D - 1, ?SCRUB_WIDTH)
+    end;
+scrub(T, D) when is_tuple(T) ->
+    list_to_tuple(scrub_list(tuple_to_list(T), D - 1, ?SCRUB_WIDTH));
+scrub(T, D) when is_map(T) ->
+    scrub_map(maps:next(maps:iterator(T)), D - 1, ?SCRUB_WIDTH, #{});
+scrub(_T, _D) ->
+    '...'.
+
+scrub_list([], _D, _N) ->
+    [];
+scrub_list(_L, _D, 0) ->
+    ['...'];
+scrub_list([H | T], D, N) ->
+    [scrub(H, D) | scrub_list(T, D, N - 1)];
+scrub_list(Tail, D, _N) ->
+    %% improper list tail
+    scrub(Tail, D).
+
+scrub_map(none, _D, _N, Acc) ->
+    Acc;
+scrub_map(_Next, _D, 0, Acc) ->
+    Acc#{'...' => '...'};
+scrub_map({K, V, I}, D, N, Acc) ->
+    scrub_map(maps:next(I), D, N - 1, Acc#{scrub_key(K, D) => scrub(V, D)}).
+
+scrub_key(K, _D) when is_atom(K) ->
+    K;
+scrub_key(K, _D) when is_binary(K) andalso byte_size(K) =< ?SCRUB_KEY_MAX_BYTES ->
+    K;
+scrub_key(K, D) ->
+    scrub(K, D).
 
 %% response error
 reply({ErrorStatus, #{code := Code, message := Message} = Resp}, Req, Handler) when

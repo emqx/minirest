@@ -36,6 +36,7 @@
     set_cookies/2,
     crash_function_clause/3,
     crash_badmatch/2,
+    crash_deep_body/2,
     crash_plain/2
 ]).
 
@@ -55,6 +56,7 @@ api_spec() ->
             set_cookies(),
             crash_function_clause(),
             crash_badmatch(),
+            crash_deep_body(),
             crash_plain()
         ],
         []
@@ -195,6 +197,15 @@ crash_badmatch() ->
     },
     {"/crash_badmatch", MetaData, crash_badmatch}.
 
+crash_deep_body() ->
+    MetaData = #{
+        post => #{
+            description => "crash with function_clause and a large body",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/crash_deep_body", MetaData, crash_deep_body}.
+
 crash_plain() ->
     MetaData = #{
         get => #{
@@ -272,6 +283,9 @@ crash_function_clause(post, _Params, _Request) ->
 
 crash_badmatch(post, #{body := #{<<"secret">> := Secret}}) ->
     ok = Secret.
+
+crash_deep_body(get, _Params) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 crash_plain(get, _) ->
     error(boom).
