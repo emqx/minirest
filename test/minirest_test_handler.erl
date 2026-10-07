@@ -31,7 +31,11 @@
     auth_meta_in_handler/2,
     handler_meta_in_auth/2,
     route_path_in_auth/2,
-    post_large_body/2
+    post_large_body/2,
+    crash_function_clause/3,
+    crash_badmatch/2,
+    crash_deep_body/2,
+    crash_plain/2
 ]).
 
 api_spec() ->
@@ -45,7 +49,11 @@ api_spec() ->
             auth_meta_in_handler(),
             handler_meta_in_auth(),
             route_path_in_auth(),
-            post_large_body()
+            post_large_body(),
+            crash_function_clause(),
+            crash_badmatch(),
+            crash_deep_body(),
+            crash_plain()
         ],
         []
     }.
@@ -149,6 +157,42 @@ post_large_body() ->
     },
     {"/post_large_body", MetaData, post_large_body}.
 
+crash_function_clause() ->
+    MetaData = #{
+        get => #{
+            description => "crash with function_clause",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/crash_function_clause", MetaData, crash_function_clause}.
+
+crash_badmatch() ->
+    MetaData = #{
+        post => #{
+            description => "crash with badmatch on a body value",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/crash_badmatch", MetaData, crash_badmatch}.
+
+crash_deep_body() ->
+    MetaData = #{
+        post => #{
+            description => "crash with function_clause and a large body",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/crash_deep_body", MetaData, crash_deep_body}.
+
+crash_plain() ->
+    MetaData = #{
+        get => #{
+            description => "crash with a plain error",
+            responses => text_plain_200_response()
+        }
+    },
+    {"/crash_plain", MetaData, crash_plain}.
+
 %%--------------------------------------------------------------------
 %% Handlers
 %%--------------------------------------------------------------------
@@ -194,6 +238,20 @@ route_path_in_auth(get, #{auth_meta := #{route_path := RoutePath}}) ->
 
 post_large_body(post, #{body := _Body}) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
+
+%% No clause matches `get', so the call fails with `function_clause'
+%% and the stacktrace carries the arguments, the request included.
+crash_function_clause(post, _Params, _Request) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
+
+crash_badmatch(post, #{body := #{<<"secret">> := Secret}}) ->
+    ok = Secret.
+
+crash_deep_body(get, _Params) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
+
+crash_plain(get, _) ->
+    error(boom).
 
 %%--------------------------------------------------------------------
 %% Helpers
