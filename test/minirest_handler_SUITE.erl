@@ -22,6 +22,8 @@
 -define(PORT, 8088).
 -define(SERVER_NAME, test_server).
 -define(HANDLER_MODULE, minirest_test_handler).
+-define(LOG_CAPTURE, minirest_handler_SUITE_log_capture).
+-define(AUTH_TOKEN, "Bearer token-must-not-appear-in-output").
 
 all() ->
     [
@@ -34,7 +36,11 @@ all() ->
         t_handler_meta_in_auth,
         t_route_path_in_auth,
         t_post_large_body,
-        t_update_log_meta_outside_request
+        t_update_log_meta_outside_request,
+        t_crash_hides_request,
+        t_crash_hides_reason_data,
+        t_crash_trace_keeps_location,
+        t_crash_response_format
     ].
 
 init_per_suite(Config) ->
@@ -55,11 +61,16 @@ init_per_testcase(t_route_path_in_auth, Config) ->
         #{authorization => {?HANDLER_MODULE, authorize_path}}
     ),
     Config;
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Case, Config) ->
     ok = start_minirest(),
+    case atom_to_list(Case) of
+        "t_crash_" ++ _ -> ok = add_log_capture();
+        _ -> ok
+    end,
     Config.
 
 end_per_testcase(_Case, _Config) ->
+    _ = logger:remove_handler(?LOG_CAPTURE),
     ok = stop_minirest().
 
 %%--------------------------------------------------------------------
@@ -142,9 +153,94 @@ t_update_log_meta_outside_request(_Config) ->
     ?assertEqual(ok, minirest_handler:update_log_meta(#{source => <<"nobody">>})),
     ?assertEqual(undefined, erlang:get({minirest_handler, meta})).
 
+%% A handler crash with the request in the stacktrace arguments puts
+%% neither the authorization header nor its value into the response or the log.
+t_crash_hides_request(_Config) ->
+    {ok, {{_, 500, _}, _, Body}} =
+        httpc:request(
+            get,
+            {address() ++ "/crash_function_clause", [{"authorization", ?AUTH_TOKEN}]},
+            [],
+            [{body_format, binary}]
+        ),
+    #{<<"code">> := <<"INTERNAL_ERROR">>, <<"message">> := Message} =
+        jsx:decode(Body, [return_maps]),
+    Log = receive_crash_log(),
+    lists:foreach(
+        fun(Output) ->
+            ?assertEqual(nomatch, string:find(Output, "token-must-not-appear-in-output")),
+            ?assertEqual(nomatch, string:find(Output, "authorization"))
+        end,
+        [Body, Message, io_lib:format("~0p", [Log])]
+    ).
+
+%% A handler crash with request data in the error reason does not put
+%% that data into the response or the log.
+t_crash_hides_reason_data(_Config) ->
+    Secret = <<"secret-must-not-appear-in-output">>,
+    {ok, {{_, 500, _}, _, Body}} =
+        httpc:request(
+            post,
+            {
+                address() ++ "/crash_badmatch",
+                [],
+                "application/json",
+                jsx:encode(#{<<"secret">> => Secret})
+            },
+            [],
+            [{body_format, binary}]
+        ),
+    #{report := #{reason := Reason}} = Log = receive_crash_log(),
+    ?assertMatch({badmatch, _}, Reason),
+    lists:foreach(
+        fun(Output) -> ?assertEqual(nomatch, string:find(Output, Secret)) end,
+        [Body, io_lib:format("~0p", [Log])]
+    ).
+
+%% The logged stacktrace still names the module, function, arity and
+%% line of the crash.
+t_crash_trace_keeps_location(_Config) ->
+    {ok, {{_, 500, _}, _, _}} = httpc:request(address() ++ "/crash_function_clause"),
+    #{report := #{exception := error, reason := function_clause, stacktrace := Stack}} =
+        receive_crash_log(),
+    [{?HANDLER_MODULE, crash_function_clause, 3, Location} | _] = Stack,
+    ?assert(is_integer(proplists:get_value(line, Location))),
+    ?assertMatch(
+        "minirest_test_handler.erl", filename:basename(proplists:get_value(file, Location))
+    ).
+
+%% The response message for a crash keeps the `Class, Reason, Stacktrace' format.
+t_crash_response_format(_Config) ->
+    {ok, {{_, 500, _}, _, Body}} =
+        httpc:request(get, {address() ++ "/crash_plain", []}, [], [{body_format, binary}]),
+    #{<<"code">> := <<"INTERNAL_ERROR">>, <<"message">> := Message} =
+        jsx:decode(Body, [return_maps]),
+    ?assertMatch(
+        <<"error, boom, [{minirest_test_handler,crash_plain,2,[{file,", _/binary>>, Message
+    ),
+    _ = receive_crash_log().
+
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
+
+add_log_capture() ->
+    logger:add_handler(?LOG_CAPTURE, ?MODULE, #{level => warning, config => #{pid => self()}}).
+
+%% logger handler callback
+log(#{msg := {report, Report}, meta := #{mfa := {minirest_handler, _, _}}}, #{
+    config := #{pid := Pid}
+}) ->
+    Pid ! {crash_log, #{report => Report}};
+log(_Event, _Config) ->
+    ok.
+
+receive_crash_log() ->
+    receive
+        {crash_log, Log} -> Log
+    after 5000 ->
+        ct:fail(no_crash_log)
+    end.
 
 start_minirest() ->
     start_minirest(#{}).
