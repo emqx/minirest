@@ -200,7 +200,9 @@ apply_callback(Request, Params, #{path := Path}, Handler) ->
             end,
         erlang:apply(Mod, Fun, Args)
     catch
-        E:R:S ->
+        E:R0:S0 ->
+            R = scrub_reason(R0),
+            S = scrub_stacktrace(S0),
             ?LOG(warning, #{
                 path => Path,
                 exception => E,
@@ -210,6 +212,28 @@ apply_callback(Request, Params, #{path := Path}, Handler) ->
             Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
             {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, 'INTERNAL_ERROR', Message}
     end.
+
+%% The handler arguments and the error reason can hold request data,
+%% such as headers and body fields. Only atoms are kept from the reason,
+%% and only module, function, arity, file and line from the stacktrace.
+scrub_reason(R) when is_atom(R) ->
+    R;
+scrub_reason(R) when is_tuple(R) ->
+    list_to_tuple([scrub_reason_element(E) || E <- tuple_to_list(R)]);
+scrub_reason(_R) ->
+    '_'.
+
+scrub_reason_element(E) when is_atom(E) -> E;
+scrub_reason_element(_E) -> '_'.
+
+scrub_stacktrace(S) ->
+    [
+        {M, F, scrub_args(A), [I || {K, _} = I <- Location, K =:= file orelse K =:= line]}
+     || {M, F, A, Location} <- S
+    ].
+
+scrub_args(A) when is_list(A) -> length(A);
+scrub_args(A) -> A.
 
 %% response error
 reply({ErrorStatus, #{code := Code, message := Message} = Resp}, Req, Handler) when
