@@ -38,6 +38,9 @@ all() ->
         t_post_large_body,
         t_set_cookie,
         t_set_cookies,
+        t_json_utf8,
+        t_json_utf8_invalid,
+        t_json_utf8_chunked,
         t_update_log_meta_outside_request,
         t_crash_hides_request,
         t_crash_hides_reason_data,
@@ -170,6 +173,79 @@ t_set_cookies(_Config) ->
         lists:sort([cookie_pair(C) || C <- set_cookie_headers(Headers)])
     ).
 
+t_json_utf8(_Config) ->
+    URL = address() ++ "/echo_json",
+    Headers = [{<<"content-type">>, <<"application/json">>}],
+    ValidValues = [
+        %% "café": C3 A9 is the valid two-byte UTF-8 encoding of U+00E9.
+        {<<"caf", 16#C3, 16#A9>>, <<"caf", 16#C3, 16#A9>>},
+        %% "中文": /utf8 encodes the Unicode codepoints U+4E2D and U+6587.
+        {<<16#4E2D/utf8, 16#6587/utf8>>, <<16#4E2D/utf8, 16#6587/utf8>>},
+        %% "😀": U+1F600 is a valid codepoint encoded as four UTF-8 bytes.
+        {<<16#1F600/utf8>>, <<16#1F600/utf8>>},
+        %% The JSON surrogate pair D83D DE00 decodes to the same U+1F600 emoji.
+        {<<"\\uD83D\\uDE00">>, <<16#1F600/utf8>>},
+        %% A literal U+FFFD is valid Unicode; it does not indicate malformed input.
+        {<<16#FFFD/utf8>>, <<16#FFFD/utf8>>},
+        %% The JSON escape for U+FFFD must also decode without being rejected.
+        {<<"\\uFFFD">>, <<16#FFFD/utf8>>}
+    ],
+    lists:foreach(
+        fun({Value, Expected}) ->
+            Json = <<"{\"value\":\"", Value/binary, "\"}">>,
+            {ok, 200, _, Ref} = hackney:request(post, URL, Headers, Json, []),
+            {ok, Response} = hackney:body(Ref),
+            ?assertEqual(#{<<"value">> => Expected}, jsx:decode(Response, [return_maps]))
+        end,
+        ValidValues
+    ).
+
+t_json_utf8_invalid(_Config) ->
+    URL = address() ++ "/echo_json",
+    Headers = [{<<"content-type">>, <<"application/json">>}],
+    InvalidValues = [
+        <<16#30, 16#82, 16#01, 16#80, 16#A0>>,
+        <<"caf", 16#C3>>,
+        binary:copy(<<16#80>>, 1_048_576),
+        <<(binary:copy(<<$a>>, 1_048_576))/binary, 16#80>>,
+        <<16#C0, 16#AF>>,
+        <<16#ED, 16#A0, 16#80>>,
+        <<16#F4, 16#90, 16#80, 16#80>>,
+        <<"\\uD800">>,
+        <<"\\uDC00">>
+    ],
+    InvalidBodies = [
+        <<"{\"", 16#80, "\":\"value\"}">>,
+        <<"{/*", 16#80, "*/\"value\":\"ok\"}">>
+        | [<<"{\"value\":\"", Value/binary, "\"}">> || Value <- InvalidValues]
+    ],
+    lists:foreach(
+        fun(Invalid) ->
+            {ok, 400, _, Ref} = hackney:request(post, URL, Headers, Invalid, []),
+            {ok, Response} = hackney:body(Ref),
+            assert_invalid_json(Response)
+        end,
+        InvalidBodies
+    ).
+
+t_json_utf8_chunked(_Config) ->
+    %% UTF-8 characters and surrogate pairs can cross HTTP chunk boundaries.
+    ValidChunks = [
+        {[<<"{\"value\":\"caf">>, <<16#C3>>, <<16#A9, "\"}">>], <<"caf", 16#C3, 16#A9>>},
+        {[<<"{\"value\":\"\\uD83D">>, <<"\\uDE00\"}">>], <<16#1F600/utf8>>}
+    ],
+    lists:foreach(
+        fun({Chunks, Expected}) ->
+            {200, Response} = json_stream_request(Chunks),
+            ?assertEqual(#{<<"value">> => Expected}, jsx:decode(Response, [return_maps]))
+        end,
+        ValidChunks
+    ),
+    {400, InvalidResponse} = json_stream_request([
+        <<"{\"value\":\"caf">>, <<16#C3>>, <<"\"}">>
+    ]),
+    assert_invalid_json(InvalidResponse).
+
 %% `update_log_meta/1' does nothing in a process that does not handle a
 %% minirest request.
 t_update_log_meta_outside_request(_Config) ->
@@ -287,6 +363,29 @@ set_cookie_headers(Headers) ->
 
 cookie_pair(Cookie) ->
     hd(binary:split(Cookie, <<";">>)).
+
+assert_invalid_json(Response) ->
+    ?assert(byte_size(Response) < 128),
+    ?assertEqual(nomatch, binary:match(Response, <<16#EF, 16#BF, 16#BD>>)),
+    ?assertEqual(
+        #{
+            <<"code">> => <<"BAD_REQUEST">>,
+            <<"message">> => <<"Invalid json message received">>
+        },
+        jsx:decode(Response, [return_maps])
+    ).
+
+json_stream_request(Chunks) ->
+    Headers = [
+        {<<"content-type">>, <<"application/json">>},
+        {<<"transfer-encoding">>, <<"chunked">>}
+    ],
+    {ok, Ref} = hackney:request(post, address() ++ "/echo_json", Headers, stream, []),
+    lists:foreach(fun(Chunk) -> ok = hackney:send_body(Ref, Chunk) end, Chunks),
+    ok = hackney:finish_send_body(Ref),
+    {ok, Status, _, Ref} = hackney:start_response(Ref),
+    {ok, Response} = hackney:body(Ref),
+    {Status, Response}.
 
 add_log_capture() ->
     logger:add_handler(?LOG_CAPTURE, ?MODULE, #{level => warning, config => #{pid => self()}}).

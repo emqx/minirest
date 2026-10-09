@@ -60,7 +60,7 @@ decoder(Request) ->
 json_decoder(Request) ->
     {ok, Body, NRequest} = binary_decoder(Request),
     try
-        {ok, jsx:decode(Body, [return_maps]), NRequest}
+        {ok, jsx:decode(Body, [return_maps, {strict, [utf8]}]), NRequest}
     catch
         _:_:_ ->
             Error = #{code => <<"BAD_REQUEST">>, message => <<"Invalid json message received">>},
