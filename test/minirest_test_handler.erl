@@ -34,6 +34,7 @@
     post_large_body/2,
     set_cookie/2,
     set_cookies/2,
+    echo_json/2,
     crash_function_clause/3,
     crash_badmatch/2,
     crash_deep_body/2,
@@ -54,6 +55,7 @@ api_spec() ->
             post_large_body(),
             set_cookie(),
             set_cookies(),
+            echo_json(),
             crash_function_clause(),
             crash_badmatch(),
             crash_deep_body(),
@@ -179,6 +181,15 @@ set_cookies() ->
     },
     {"/set_cookies", MetaData, set_cookies}.
 
+echo_json() ->
+    MetaData = #{
+        post => #{
+            description => "echo parsed JSON body",
+            responses => #{<<"200">> => #{description => "Parsed JSON body"}}
+        }
+    },
+    {"/echo_json", MetaData, echo_json}.
+
 crash_function_clause() ->
     MetaData = #{
         get => #{
@@ -275,6 +286,9 @@ set_cookies(get, _) ->
     ],
     Headers = #{<<"content-type">> => <<"test/plain">>, <<"set-cookie">> => Cookies},
     {200, Headers, <<"OK">>}.
+
+echo_json(post, #{body := Body}) ->
+    {200, #{}, Body}.
 
 %% No clause matches `get', so the call fails with `function_clause'
 %% and the stacktrace carries the arguments, the request included.
