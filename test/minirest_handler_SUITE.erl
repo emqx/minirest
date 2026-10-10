@@ -46,7 +46,10 @@ all() ->
         t_crash_hides_reason_data,
         t_crash_trace_keeps_location,
         t_crash_trace_limits,
-        t_crash_response_format
+        t_crash_response_format,
+        t_crash_bad_header_in_authorize,
+        t_crash_in_authorize,
+        t_crash_in_filter
     ].
 
 init_per_suite(Config) ->
@@ -66,6 +69,14 @@ init_per_testcase(t_route_path_in_auth, Config) ->
     ok = start_minirest(
         #{authorization => {?HANDLER_MODULE, authorize_path}}
     ),
+    Config;
+init_per_testcase(t_crash_bad_header_in_authorize, Config) ->
+    ok = start_minirest(#{authorization => {?HANDLER_MODULE, authorize_parse_header}}),
+    ok = add_log_capture(),
+    Config;
+init_per_testcase(t_crash_in_authorize, Config) ->
+    ok = start_minirest(#{authorization => {?HANDLER_MODULE, authorize_crash}}),
+    ok = add_log_capture(),
     Config;
 init_per_testcase(Case, Config) ->
     ok = start_minirest(),
@@ -354,6 +365,53 @@ t_crash_response_format(_Config) ->
     ),
     _ = receive_crash_log().
 
+%% A malformed authorization header makes the header parser in the
+%% authorize callback fail. The request gets 400, and no log event holds
+%% the header content.
+t_crash_bad_header_in_authorize(_Config) ->
+    Header = "Basic " ++ base64:encode_to_string("fakekey-NOCOLON-fakesecret"),
+    {ok, {{_, Status, _}, _, Body}} =
+        httpc:request(
+            get,
+            {address() ++ "/auth_meta_in_handler", [{"authorization", Header}]},
+            [],
+            [{body_format, binary}]
+        ),
+    assert_no_log_holds(["fakesecret", base64:encode_to_string("fakekey-NOCOLON-fakesecret")]),
+    ?assertEqual(400, Status),
+    ?assertMatch(#{<<"code">> := <<"BAD_REQUEST">>}, jsx:decode(Body, [return_maps])).
+
+%% A crash in the authorize callback gets 500, and the log holds the
+%% scrubbed stacktrace but not the authorization header value.
+t_crash_in_authorize(_Config) ->
+    {ok, {{_, Status, _}, _, Body}} =
+        httpc:request(
+            get,
+            {address() ++ "/auth_meta_in_handler", [{"authorization", ?AUTH_TOKEN}]},
+            [],
+            [{body_format, binary}]
+        ),
+    assert_no_log_holds(["token-must-not-appear-in-output"]),
+    ?assertEqual(500, Status),
+    ?assertMatch(#{<<"code">> := <<"INTERNAL_ERROR">>}, jsx:decode(Body, [return_maps])),
+    #{report := #{stacktrace := [{?HANDLER_MODULE, authorize_crash, [_Request], _} | _]}} =
+        receive_crash_log().
+
+%% A crash in the filter gets 500, and the log holds the scrubbed
+%% stacktrace but not the authorization header value.
+t_crash_in_filter(_Config) ->
+    {ok, {{_, Status, _}, _, Body}} =
+        httpc:request(
+            get,
+            {address() ++ "/crash_in_filter", [{"authorization", ?AUTH_TOKEN}]},
+            [],
+            [{body_format, binary}]
+        ),
+    assert_no_log_holds(["token-must-not-appear-in-output"]),
+    ?assertEqual(500, Status),
+    ?assertMatch(#{<<"code">> := <<"INTERNAL_ERROR">>}, jsx:decode(Body, [return_maps])),
+    #{report := #{reason := function_clause}} = receive_crash_log().
+
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
@@ -391,19 +449,32 @@ add_log_capture() ->
     logger:add_handler(?LOG_CAPTURE, ?MODULE, #{level => warning, config => #{pid => self()}}).
 
 %% logger handler callback
-log(#{msg := {report, Report}, meta := #{mfa := {minirest_handler, _, _}}}, #{
-    config := #{pid := Pid}
-}) ->
-    Pid ! {crash_log, #{report => Report}};
-log(_Event, _Config) ->
-    ok.
+log(Event, #{config := #{pid := Pid}}) ->
+    Pid ! {log_event, Event}.
 
 receive_crash_log() ->
     receive
-        {crash_log, Log} -> Log
+        {log_event, #{msg := {report, Report}, meta := #{mfa := {minirest_handler, _, _}}}} ->
+            #{report => Report}
     after 5000 ->
         ct:fail(no_crash_log)
     end.
+
+%% Check every log event that arrives within one second, including crash
+%% reports from the cowboy request process. The events stay in the mailbox.
+assert_no_log_holds(Values) ->
+    timer:sleep(1000),
+    {messages, Messages} = erlang:process_info(self(), messages),
+    lists:foreach(
+        fun
+            ({log_event, Event}) ->
+                Text = io_lib:format("~0p", [Event]),
+                [?assertEqual(nomatch, string:find(Text, V), Text) || V <- Values];
+            (_) ->
+                ok
+        end,
+        Messages
+    ).
 
 start_minirest() ->
     start_minirest(#{}).
