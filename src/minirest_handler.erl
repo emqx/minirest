@@ -74,12 +74,14 @@ handle(Request, #{path := Path, methods := Methods} = State) ->
             };
         {ok, Handler = #handler{log_meta = LogMeta, method = MethodAtom}} ->
             init_log_meta(LogMeta#{operation_id => OperationId, method => MethodAtom}),
-            case do_authorize(Request, Path, Handler) of
+            case guard(Path, fun() -> do_authorize(Request, Path, Handler) end) of
                 {ok, AuthMeta} ->
                     update_log_meta(AuthMeta),
-                    case do_parse_params(Request, AuthMeta) of
+                    case guard(Path, fun() -> do_parse_params(Request, AuthMeta) end) of
                         {ok, Params, NRequest} ->
-                            case do_validate_params(Params, State, Handler) of
+                            case
+                                guard(Path, fun() -> do_validate_params(Params, State, Handler) end)
+                            of
                                 {ok, NParams} ->
                                     prepend_log_meta(NParams),
                                     Response = apply_callback(NRequest, NParams, State, Handler),
@@ -195,14 +197,23 @@ do_validate_params(Params, _State, _Handler) ->
 
 apply_callback(Request, Params, #{path := Path}, Handler) ->
     #handler{method = Method, module = Mod, function = Fun} = Handler,
-    try
+    guard(Path, fun() ->
         Args =
             case erlang:function_exported(Mod, Fun, 3) of
                 true -> [Method, Params, Request];
                 false -> [Method, Params]
             end,
         erlang:apply(Mod, Fun, Args)
+    end).
+
+%% Run one step of the request. An exception becomes an error response, and
+%% its log entry holds only the scrubbed reason and stacktrace.
+guard(Path, Fun) ->
+    try
+        Fun()
     catch
+        exit:{request_error, Reason, HumanReadable} ->
+            request_error_response(Reason, HumanReadable);
         E:R0:S0 ->
             R = scrub_reason(R0),
             S = scrub_stacktrace(S0),
@@ -215,6 +226,19 @@ apply_callback(Request, Params, #{path := Path}, Handler) ->
             Message = list_to_binary(io_lib:format("~p, ~0p, ~0p", [E, R, S], [])),
             {?RESPONSE_CODE_INTERNAL_SERVER_ERROR, 'INTERNAL_ERROR', Message}
     end.
+
+%% cowboy raises `request_error' for a request it cannot read, for example a
+%% malformed header. The status codes match the ones cowboy sends.
+request_error_response(timeout, HumanReadable) ->
+    {?RESPONSE_CODE_REQUEST_TIMEOUT, 'REQUEST_TIMEOUT', human_readable(HumanReadable)};
+request_error_response(payload_too_large, HumanReadable) ->
+    {?RESPONSE_CODE_PAYLOAD_TOO_LARGE, 'PAYLOAD_TOO_LARGE', human_readable(HumanReadable)};
+request_error_response(_Reason, HumanReadable) ->
+    {?RESPONSE_CODE_BAD_REQUEST, 'BAD_REQUEST', human_readable(HumanReadable)}.
+
+human_readable(Text) when is_atom(Text) -> atom_to_binary(Text, utf8);
+human_readable(Text) when is_binary(Text) -> Text;
+human_readable(_Text) -> <<"Bad request">>.
 
 %% The handler arguments and the error reason can hold request data,
 %% such as headers and body fields. They are kept as a shape only:
@@ -356,6 +380,8 @@ maybe_ignore_code_check(401, _Code) -> true;
 maybe_ignore_code_check(403, _Code) -> true;
 maybe_ignore_code_check(415, _Code) -> true;
 maybe_ignore_code_check(400, 'BAD_REQUEST') -> true;
+maybe_ignore_code_check(408, 'REQUEST_TIMEOUT') -> true;
+maybe_ignore_code_check(413, 'PAYLOAD_TOO_LARGE') -> true;
 maybe_ignore_code_check(500, 'INTERNAL_ERROR') -> true;
 maybe_ignore_code_check(_, _) -> false.
 

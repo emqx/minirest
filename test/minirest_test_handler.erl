@@ -23,6 +23,9 @@
     authorize1/1,
     authorize2/2,
     authorize_path/2,
+    authorize_parse_header/1,
+    authorize_crash/1,
+    crash_in_filter/2,
     lazy_body/2,
     binary_body/2,
     flex_error/2,
@@ -50,6 +53,7 @@ api_spec() ->
             handler_meta_in_auth(),
             route_path_in_auth(),
             post_large_body(),
+            crash_in_filter(),
             crash_function_clause(),
             crash_badmatch(),
             crash_deep_body(),
@@ -157,6 +161,16 @@ post_large_body() ->
     },
     {"/post_large_body", MetaData, post_large_body}.
 
+crash_in_filter() ->
+    MetaData = #{
+        get => #{
+            description => "crash in the filter",
+            responses => text_plain_200_response()
+        }
+    },
+    Filter = fun(#{never_present := _}, _) -> {ok, #{}} end,
+    {"/crash_in_filter", MetaData, crash_in_filter, #{filter => Filter}}.
+
 crash_function_clause() ->
     MetaData = #{
         get => #{
@@ -209,6 +223,15 @@ authorize2(_Req, #{module := Module, function := Fun}) ->
 authorize_path(_Req, #{path := Path}) ->
     {ok, #{route_path => list_to_binary(Path)}}.
 
+authorize_parse_header(Req) ->
+    _ = cowboy_req:parse_header(<<"authorization">>, Req),
+    {ok, #{message => <<"hello from authorize">>}}.
+
+%% No clause matches a request, so the call fails with `function_clause'
+%% and the stacktrace carries the request.
+authorize_crash(#{never_present := _}) ->
+    {ok, #{}}.
+
 lazy_body(get, _) ->
     BodyQH = qlc:table(fun() -> [<<"first">>, <<"second">>] end, []),
     {200, #{<<"content-type">> => <<"test/plain">>}, BodyQH}.
@@ -248,6 +271,9 @@ crash_badmatch(post, #{body := #{<<"secret">> := Secret}}) ->
     ok = Secret.
 
 crash_deep_body(get, _Params) ->
+    {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
+
+crash_in_filter(get, _) ->
     {200, #{<<"content-type">> => <<"test/plain">>}, <<"OK">>}.
 
 crash_plain(get, _) ->
